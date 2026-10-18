@@ -2,23 +2,95 @@ import { createServer, type Server } from 'node:http';
 import type { Config } from './config/index';
 import { createApp } from './app';
 import { createLogger, type Logger } from './lib/logger';
-import { createMetrics } from './lib/metrics';
-import { createPrisma } from './db/prisma';
-import { createRedis } from './db/redis';
+import { createMetrics, type Metrics } from './lib/metrics';
+import { createPrisma, type Db } from './db/prisma';
+import { createRedis, type Redis } from './db/redis';
+import { CfClient } from '@duel/cf-client';
+import { authMiddleware } from './modules/auth/auth.middleware';
+import { AuthService } from './modules/auth/auth.service';
+import { createAuthRouter } from './modules/auth/auth.router';
+import { HandlesService } from './modules/handles/handles.service';
+import { createHandlesRouter } from './modules/handles/handles.router';
+import { createRateLimiter } from './lib/rate-limiter';
 
 export interface RunningServer {
   server: Server;
   logger: Logger;
+  metrics: Metrics;
+  prisma: Db;
+  redis: Redis;
+  cfClient: CfClient;
+  authService: AuthService;
+  handlesService: HandlesService;
   port: number;
   close: () => Promise<void>;
 }
 
+export interface ServerOverrides {
+  cfClient?: CfClient;
+  prisma?: Db;
+  redis?: Redis;
+}
+
 /** Composition root: wires every module together and starts listening. */
-export async function startServer(config: Config): Promise<RunningServer> {
+export async function startServer(
+  config: Config,
+  overrides?: ServerOverrides,
+): Promise<RunningServer> {
   const logger = createLogger(config);
   const metrics = createMetrics();
-  const prisma = createPrisma(config.databaseUrl);
-  const redis = createRedis(config.redisUrl);
+  const prisma = overrides?.prisma ?? createPrisma(config.databaseUrl);
+  const redis = overrides?.redis ?? createRedis(config.redisUrl);
+
+  const cfClient =
+    overrides?.cfClient ??
+    new CfClient({
+      baseUrl: config.cf.baseUrl,
+      userAgent: config.cf.userAgent,
+      maxRps: config.cf.maxRps,
+      timeoutMs: config.cf.timeoutMs,
+      retryMax: config.cf.retryMax,
+      retryBaseMs: config.cf.retryBaseMs,
+      retryMaxDelayMs: config.cf.retryMaxDelayMs,
+      degradedAfterFailures: config.cf.degradedAfterFailures,
+      metrics: {
+        onCfRequest: (endpoint, status, durationSec) => {
+          metrics.cfRequestsTotal.inc({ endpoint, status });
+          metrics.cfRequestSeconds.observe({ endpoint }, durationSec);
+        },
+        onQueueDepth: (lane, depth) => {
+          metrics.cfQueueDepth.set({ lane }, depth);
+        },
+      },
+    });
+
+  const authService = new AuthService(prisma, config);
+  const handlesService = new HandlesService(prisma, cfClient, config);
+
+  // Rate limiters
+  const apiLimiter = createRateLimiter({
+    windowMs: config.http.apiRateLimitWindowMs,
+    max: config.http.apiRateLimitMax,
+    redis,
+    prefix: 'rl:api:',
+  });
+
+  const authLimiter = createRateLimiter({
+    windowMs: config.auth.rateLimitWindowMs,
+    max: config.auth.rateLimitMax,
+    redis,
+    prefix: 'rl:auth:',
+  });
+
+  const handlesLimiter = createRateLimiter({
+    windowMs: 3600 * 1000,
+    max: config.handles.rateLimitPerHour,
+    redis,
+    prefix: 'rl:handles:',
+  });
+
+  const authRouter = createAuthRouter(authService, config);
+  const handlesRouter = createHandlesRouter(handlesService);
 
   const app = createApp({
     config,
@@ -32,6 +104,13 @@ export async function startServer(config: Config): Promise<RunningServer> {
         await redis.ping();
       },
     },
+    apiMiddleware: [apiLimiter, authMiddleware(config.auth.jwtSecret, config.auth.cookieName)],
+    routers: [
+      ['/auth', authLimiter],
+      ['/auth', authRouter],
+      ['/handles', handlesLimiter],
+      ['/handles', handlesRouter],
+    ],
   });
 
   const server = createServer(app);
@@ -45,8 +124,20 @@ export async function startServer(config: Config): Promise<RunningServer> {
     (closing ??= (async () => {
       logger.info('shutting down');
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      cfClient.destroy();
       await Promise.allSettled([prisma.$disconnect(), redis.quit()]);
     })());
 
-  return { server, logger, port, close };
+  return {
+    server,
+    logger,
+    metrics,
+    prisma,
+    redis,
+    cfClient,
+    authService,
+    handlesService,
+    port,
+    close,
+  };
 }

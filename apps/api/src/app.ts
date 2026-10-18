@@ -19,7 +19,7 @@ export interface AppOptions {
   metrics: Metrics;
   health: HealthChecks;
   /** Routers mounted under /api, keyed by path prefix. */
-  routers?: Array<[string, Router]>;
+  routers?: Array<[string, Router | express.RequestHandler]>;
   /** Middleware applied to every /api request before routers (e.g. rate limiter). */
   apiMiddleware?: express.RequestHandler[];
 }

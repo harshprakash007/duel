@@ -48,3 +48,23 @@ Newest entries go at the bottom of each milestone section.
   - First successful request automatically clears `DEGRADED` back to `OK` and emits `stateChange` and `recovered` events.
 - **Fake Codeforces Server:**
   - Embedded Express in-memory server with seedable problems, statistics, users, controllable submissions (TESTING -> final transitions), outage simulation, failure injectors (`500`, `rate-limit`, `timeout`, `network`), and `recentStatus` window truncation.
+
+## M2 — Auth and Handle Linking
+
+- **Password hashing:** Argon2id with 19 MiB memory cost, 2 iterations, 1 parallelism via `argon2`.
+- **Session token & transport:**
+  - Signed HS256 JWT in an `httpOnly`, `SameSite=Lax` cookie (`duel_session`), valid for 7 days.
+  - In production (`NODE_ENV === 'production'`), `Secure` flag is enforced.
+  - Fallback to `Authorization: Bearer <token>` supported for API testing and non-browser clients.
+- **CSRF Defense:** SameSite=Lax cookies combined with Origin header verification on all mutating requests.
+- **Handle verification flow:**
+  - `POST /api/handles/link/start`: validates Codeforces existence via high-priority `user.info`. Ensures handle is not already bound to another account. Supercedes prior pending attempts.
+  - Assigned problem chosen at random from configured pool (`HANDLE_VERIFY_PROBLEMS`).
+  - `POST /api/handles/link/verify`: queries `user.status` for `COMPILATION_ERROR` within verification window (with 5s slack). Clamps initial rating into `[RATING_INIT_MIN, RATING_INIT_MAX]` (800–2400) based on `cfRating ?? 1000`.
+  - Atomically creates `CfHandle` and `PlayerRating` inside a database transaction.
+- **Rate limiting:**
+  - Express rate limiter backed by Redis store (`rate-limit-redis`) with per-user (or per-IP fallback) tracking.
+  - Dedicated stricter limits for auth (20 req / 15 min) and handle verification (10 req / hour).
+- **Web UI:**
+  - Login, registration, and responsive interactive handle linking wizard with live 5-minute countdown and verification polling.
+
