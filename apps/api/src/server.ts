@@ -17,6 +17,8 @@ import { CatalogSyncService } from './modules/problems/catalog-sync.service';
 import { SolvedSetService } from './modules/problems/solved-set.service';
 import { PickerService } from './modules/problems/picker.service';
 import { CatalogSyncQueue } from './modules/problems/catalog-sync.queue';
+import { PollerService } from './modules/poller/poller.service';
+import { LeaderLock } from './lib/leader-lock';
 import { createAdminRouter } from './modules/admin/admin.router';
 import { createRateLimiter } from './lib/rate-limiter';
 
@@ -34,6 +36,8 @@ export interface RunningServer {
   solvedSetService: SolvedSetService;
   pickerService: PickerService;
   catalogSyncQueue: CatalogSyncQueue;
+  pollerService: PollerService;
+  leaderLock: LeaderLock;
   port: number;
   close: () => Promise<void>;
 }
@@ -87,8 +91,29 @@ export async function startServer(
   const catalogSyncService = new CatalogSyncService(prisma, cfClient, config, logger);
   const pickerService = new PickerService(prisma, config);
   const catalogSyncQueue = new CatalogSyncQueue(redis, config, logger, catalogSyncService);
+  const pollerService = new PollerService(cfClient, config, logger);
+
+  const leaderLock = new LeaderLock({
+    redis,
+    instanceId: config.instanceId,
+    ttlMs: config.leader.ttlMs,
+    renewMs: config.leader.renewMs,
+    logger,
+    onAcquired: async () => {
+      logger.info('Instance acquired leadership; starting poller');
+      await pollerService.start();
+    },
+    onLost: async () => {
+      logger.warn('Instance lost leadership; stopping poller');
+      pollerService.stop();
+    },
+  });
 
   await catalogSyncQueue.start();
+
+  if (!config.isTest) {
+    leaderLock.startElection();
+  }
 
   // Rate limiters
   const apiLimiter = createRateLimiter({
@@ -150,6 +175,8 @@ export async function startServer(
   const close = () =>
     (closing ??= (async () => {
       logger.info('shutting down');
+      await leaderLock.stop();
+      pollerService.stop();
       await catalogSyncQueue.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       cfClient.destroy();
@@ -170,6 +197,8 @@ export async function startServer(
     solvedSetService,
     pickerService,
     catalogSyncQueue,
+    pollerService,
+    leaderLock,
     port,
     close,
   };

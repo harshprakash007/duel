@@ -91,3 +91,32 @@ Newest entries go at the bottom of each milestone section.
   - Pure function `selectProblems`: computes linearly spaced rating targets across $[minRating, maxRating]$, rounded to nearest `PICKER_SNAP` (100). Matches candidates within progressive window $[target - window, target + window]$ (widening by `windowStep` if empty, falling back to remaining pool). Uniform random sampling without replacement preserves target rating slot order.
   - `PickerService`: filters candidate problems by sheet rating band, solved count, and tag inclusions/exclusions (or curated problems in `LevelSheetProblem`), excluding problems in `UserSolved` for either player and problems from either player's recent 50 matches (`MatchQuestion`).
   - Throws `ABORT_NO_PROBLEMS` if eligible problems $< N$.
+
+## M4 — Submission Poller & Risk Gate
+
+- **Redis Leader Lock (`LeaderLock`):**
+  - Single-leader coordination using Redis key `lock:leader` with 10s TTL (`SET NX PX`).
+  - Periodic heartbeat renewal every 3s via atomic Lua script verifying ownership before extending TTL (`pexpire`).
+  - Safe lock release upon shutdown via atomic Lua delete verifying instance identity.
+  - Dynamic lifecycle callbacks (`onAcquired`, `onLost`) that start and stop the poller loop on state transitions.
+- **Authoritative Submission Poller (`PollerService`):**
+  - In-memory registry mapping active player handles (`handleNorm`) to their active match questions, problem contest ID/index, baseline submission ID, start time, deadline, and pending submissions map.
+  - Main polling cycle runs every 5s (`intervalMs = 5000`) on the normal priority lane via `recentStatus(1000)`.
+  - Polling cycle is skipped entirely when the registry is empty to preserve rate limit budget.
+  - **Gap Detection & Recovery:** Detects if `oldestIdInBatch > maxSeenSubmissionId` (indicating high-traffic CF burst overflowed the 1,000 recent status window) and triggers targeted `user.status(handle, 1, 10)` fallback for all currently active match players.
+  - **Strict Eligibility Filtering:**
+    - Rejects submissions with ID $\le baselineId$.
+    - Rejects submissions for different problems or by authors not in the active registry.
+    - Applies a 3-second clock-skew buffer (`startedAtMs - startSlackMs`) allowing submissions slightly before server-registered question start.
+    - Rejects submissions created after the question's deadline.
+    - Dispatches final verdicts (`OK`, `WRONG_ANSWER`, `TIME_LIMIT_EXCEEDED`, etc.) at most once per submission ID using `processedSubmissions` set.
+  - **Pending Submission Resolution:**
+    - Non-final verdicts (`TESTING`, `SUBMITTED`, etc.) tracked in `entry.pending`.
+    - Dedicated 3s recheck loop queries `user.status` to resolve pending verdicts to final status.
+  - **Player Submission Hint:**
+    - Invoked when player clicks submit or emits `match:submitted`.
+    - Protected by a 5-second per-user cooldown.
+    - Enqueues high-priority `user.status(handle, 1, 5, 'high')` check to deliver near-instant verdict feedback without waiting for the next 5s cycle.
+- **Verification CLI Tool (`pnpm poller:try`):**
+  - Monitors real submissions on live Codeforces across two handles on a designated problem.
+  - Automatically queries baselines for both handles and prints live detection events with elapsed time and end-to-end detection latency in seconds.

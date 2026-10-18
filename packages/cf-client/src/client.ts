@@ -142,6 +142,13 @@ export class CfClient extends EventEmitter {
   }
 
   /**
+   * Alias for problemsetRecentStatus (blueprint §12).
+   */
+  public async recentStatus(count: number, lane: PriorityLane = 'normal'): Promise<CfSubmission[]> {
+    return this.problemsetRecentStatus(count, lane);
+  }
+
+  /**
    * Fetches submissions for a specific handle.
    */
   public async userStatus(

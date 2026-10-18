@@ -16,6 +16,7 @@
     "test": "pnpm -r test",
     "test:int": "pnpm --filter @duel/api test:int",
     "cf:probe": "pnpm --filter @duel/cf-client probe",
+    "poller:try": "tsx apps/api/src/cli/poller-try.cli.ts",
     "infra:up": "docker compose up -d postgres redis",
     "infra:down": "docker compose down"
   },
