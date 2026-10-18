@@ -68,3 +68,26 @@ Newest entries go at the bottom of each milestone section.
 - **Web UI:**
   - Login, registration, and responsive interactive handle linking wizard with live 5-minute countdown and verification polling.
 
+## M3 — Problem Catalog, Sheets, Solved-Set & Picker
+
+- **Problem Catalog Sync:**
+  - Queries `problemset.problems` on the low-priority lane.
+  - Skips non-programming questions (`type !== 'PROGRAMMING'`), unrated problems, and problems matching configured exclude tags (`*special`, `interactive`).
+  - Maps problem statistics (`solvedCount`) and upserts in chunks of 500 records inside Prisma transactions.
+  - Deactivates missing problems (`isActive = false`) based on sync timestamp threshold.
+  - Prevents concurrent executions with `AppError('CONFLICT', 'Catalog sync already in progress')`.
+  - BullMQ repeatable scheduler (`0 3 * * *`) plus admin manual trigger (`POST /api/admin/problems/sync`).
+- **Level Sheets (L1–L6):**
+  - Seed definitions: L1 Warm-up (800–1000), L2 Rookie (1000–1200), L3 Challenger (1200–1400), L4 Contender (1400–1700), L5 Expert (1700–2000), L6 Master (2000–2400).
+  - Seed script `prisma/seed.ts` seeds default sheets and admin account (`admin@duel.local`).
+  - Public endpoints: `GET /api/sheets` (computes live active problem count) and `GET /api/sheets/:slug`.
+  - Admin endpoints: `GET /api/admin/sheets`, `POST /api/admin/sheets` (`CreateSheetInputSchema`), and `PATCH /api/admin/sheets/:id` (`UpdateSheetInputSchema`).
+- **Incremental Solved-Set Crawler (`SolvedSetService`):**
+  - Walks `user.status` starting at `from: 1` in batches of 100 until reaching `solvedSyncedUpToId` or exhausting history.
+  - Extracts all `OK` verdicts with valid contest IDs and bulk inserts them into `UserSolved` (`skipDuplicates: true`).
+  - Updates `cfHandle.solvedSyncedUpToId` (never downgraded) and `solvedSyncedAt`.
+  - Automatically triggered in the background upon successful handle verification and match queue join.
+- **Problem Picker (`PickerService` & `selectProblems`):**
+  - Pure function `selectProblems`: computes linearly spaced rating targets across $[minRating, maxRating]$, rounded to nearest `PICKER_SNAP` (100). Matches candidates within progressive window $[target - window, target + window]$ (widening by `windowStep` if empty, falling back to remaining pool). Uniform random sampling without replacement preserves target rating slot order.
+  - `PickerService`: filters candidate problems by sheet rating band, solved count, and tag inclusions/exclusions (or curated problems in `LevelSheetProblem`), excluding problems in `UserSolved` for either player and problems from either player's recent 50 matches (`MatchQuestion`).
+  - Throws `ABORT_NO_PROBLEMS` if eligible problems $< N$.

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
 import { loadConfig } from '../../src/config/index';
 import { startServer, type RunningServer } from '../../src/server';
-import { testEnv } from './env';
+import { cleanDb, testEnv } from './env';
 
 function getCookies(res: request.Response): string[] {
   const c = res.headers['set-cookie'];
@@ -15,8 +15,8 @@ describe('Auth API Integration', () => {
 
   beforeAll(async () => {
     srv = await startServer(loadConfig(testEnv()));
-    // Clean user table
-    await srv.prisma.user.deleteMany();
+    await srv.redis.flushdb();
+    await cleanDb(srv.prisma);
   });
 
   afterAll(async () => {

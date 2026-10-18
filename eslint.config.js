@@ -39,7 +39,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['**/scripts/**', '**/*.cli.ts', '**/bin/**'],
+    files: ['**/scripts/**', '**/*.cli.ts', '**/bin/**', '**/prisma/seed.ts'],
     rules: { 'no-console': 'off' },
   },
 );

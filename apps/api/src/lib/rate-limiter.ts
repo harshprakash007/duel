@@ -1,4 +1,4 @@
-import { rateLimit, type RateLimitRequestHandler } from 'express-rate-limit';
+import { rateLimit, type RateLimitRequestHandler, ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import type { Redis } from 'ioredis';
 import { AppError } from './errors';
@@ -32,7 +32,7 @@ export function createRateLimiter(options: RateLimiterOptions): RateLimitRequest
       }
       // If user is authenticated, limit per user ID, otherwise per IP
       const user = (req as { user?: { sub: string } }).user;
-      return user?.sub ?? req.ip ?? 'unknown';
+      return user?.sub ?? (req.ip ? ipKeyGenerator(req.ip) : 'unknown');
     },
     handler: (_req, _res, next) => {
       next(new AppError('RATE_LIMITED', 'Too many requests, please try again later'));

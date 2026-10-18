@@ -52,6 +52,26 @@ export class FakeCodeforcesServer {
     }
   }
 
+  public seedProblems(problems: CfProblem[], stats?: CfProblemStatistics[]): void {
+    const statsMap = new Map<string, CfProblemStatistics>();
+    if (stats) {
+      for (const s of stats) {
+        if (s.contestId !== undefined) {
+          statsMap.set(`${s.contestId}-${s.index.toUpperCase()}`, s);
+        }
+      }
+    }
+    for (const p of problems) {
+      const key = `${p.contestId}-${p.index.toUpperCase()}`;
+      this.seedProblem(p, statsMap.get(key));
+    }
+  }
+
+  public clearProblems(): void {
+    this.problems = [];
+    this.statistics = [];
+  }
+
   public seedUser(user: Partial<CfUser> & { handle: string }): void {
     const fullUser: CfUser = {
       rating: 1200,

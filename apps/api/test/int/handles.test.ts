@@ -4,7 +4,7 @@ import { FakeCodeforcesServer } from '@duel/cf-client/fake';
 import { CfClient } from '@duel/cf-client';
 import { loadConfig } from '../../src/config/index';
 import { startServer, type RunningServer } from '../../src/server';
-import { testEnv } from './env';
+import { cleanDb, testEnv } from './env';
 import type { CfSubmission } from '@duel/cf-client';
 
 describe('Handles API Integration with FakeCodeforcesServer', () => {
@@ -26,9 +26,8 @@ describe('Handles API Integration with FakeCodeforcesServer', () => {
     });
 
     srv = await startServer(loadConfig(testEnv()), { cfClient });
-
-    // Seed test users in DB
-    await srv.prisma.user.deleteMany();
+    await srv.redis.flushdb();
+    await cleanDb(srv.prisma);
 
     const getCookie = (res: request.Response) => {
       const c = res.headers['set-cookie'];

@@ -1,3 +1,5 @@
+import type { Db } from '../../src/db/prisma';
+
 /** Connection settings for integration tests (real Postgres + Redis, e.g. from docker compose). */
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ?? 'postgresql://duel:duel@localhost:5435/duel_test';
@@ -14,3 +16,19 @@ export const testEnv = (extra: Record<string, string> = {}): Record<string, stri
   PORT: '0',
   ...extra,
 });
+
+export async function cleanDb(db: Db): Promise<void> {
+  await db.matchQuestion.deleteMany();
+  await db.matchPlayer.deleteMany();
+  await db.ratingHistory.deleteMany();
+  await db.report.deleteMany();
+  await db.match.deleteMany();
+  await db.levelSheetProblem.deleteMany();
+  await db.userSolved.deleteMany();
+  await db.cfHandle.deleteMany();
+  await db.handleVerification.deleteMany();
+  await db.playerRating.deleteMany();
+  await db.levelSheet.deleteMany();
+  await db.problem.deleteMany();
+  await db.user.deleteMany();
+}

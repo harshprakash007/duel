@@ -11,6 +11,13 @@ import { AuthService } from './modules/auth/auth.service';
 import { createAuthRouter } from './modules/auth/auth.router';
 import { HandlesService } from './modules/handles/handles.service';
 import { createHandlesRouter } from './modules/handles/handles.router';
+import { SheetsService } from './modules/sheets/sheets.service';
+import { createSheetsRouter } from './modules/sheets/sheets.router';
+import { CatalogSyncService } from './modules/problems/catalog-sync.service';
+import { SolvedSetService } from './modules/problems/solved-set.service';
+import { PickerService } from './modules/problems/picker.service';
+import { CatalogSyncQueue } from './modules/problems/catalog-sync.queue';
+import { createAdminRouter } from './modules/admin/admin.router';
 import { createRateLimiter } from './lib/rate-limiter';
 
 export interface RunningServer {
@@ -22,6 +29,11 @@ export interface RunningServer {
   cfClient: CfClient;
   authService: AuthService;
   handlesService: HandlesService;
+  sheetsService: SheetsService;
+  catalogSyncService: CatalogSyncService;
+  solvedSetService: SolvedSetService;
+  pickerService: PickerService;
+  catalogSyncQueue: CatalogSyncQueue;
   port: number;
   close: () => Promise<void>;
 }
@@ -65,7 +77,18 @@ export async function startServer(
     });
 
   const authService = new AuthService(prisma, config);
-  const handlesService = new HandlesService(prisma, cfClient, config);
+  const solvedSetService = new SolvedSetService(prisma, cfClient, logger);
+  const handlesService = new HandlesService(prisma, cfClient, config, {
+    triggerSync: async (userId, handle) => {
+      await solvedSetService.syncUserSolved(userId, handle);
+    },
+  });
+  const sheetsService = new SheetsService(prisma);
+  const catalogSyncService = new CatalogSyncService(prisma, cfClient, config, logger);
+  const pickerService = new PickerService(prisma, config);
+  const catalogSyncQueue = new CatalogSyncQueue(redis, config, logger, catalogSyncService);
+
+  await catalogSyncQueue.start();
 
   // Rate limiters
   const apiLimiter = createRateLimiter({
@@ -91,6 +114,8 @@ export async function startServer(
 
   const authRouter = createAuthRouter(authService, config);
   const handlesRouter = createHandlesRouter(handlesService);
+  const sheetsRouter = createSheetsRouter(sheetsService);
+  const adminRouter = createAdminRouter(sheetsService, catalogSyncService);
 
   const app = createApp({
     config,
@@ -110,6 +135,8 @@ export async function startServer(
       ['/auth', authRouter],
       ['/handles', handlesLimiter],
       ['/handles', handlesRouter],
+      ['/sheets', sheetsRouter],
+      ['/admin', adminRouter],
     ],
   });
 
@@ -123,6 +150,7 @@ export async function startServer(
   const close = () =>
     (closing ??= (async () => {
       logger.info('shutting down');
+      await catalogSyncQueue.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       cfClient.destroy();
       await Promise.allSettled([prisma.$disconnect(), redis.quit()]);
@@ -137,6 +165,11 @@ export async function startServer(
     cfClient,
     authService,
     handlesService,
+    sheetsService,
+    catalogSyncService,
+    solvedSetService,
+    pickerService,
+    catalogSyncQueue,
     port,
     close,
   };
