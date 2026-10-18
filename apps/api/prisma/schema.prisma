@@ -1,0 +1,298 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+}
+
+enum MatchStatus {
+  LOBBY
+  COUNTDOWN
+  ACTIVE
+  FINISHED
+  ABORTED
+}
+
+enum MatchMode {
+  RANKED
+  PRIVATE
+}
+
+enum MatchEndReason {
+  COMPLETED
+  RESIGN
+  ABORT_NO_SHOW
+  ABORT_CF_OUTAGE
+  ABORT_NO_PROBLEMS
+  VOIDED
+}
+
+enum MatchResult {
+  WIN
+  LOSS
+  DRAW
+}
+
+enum QuestionStatus {
+  PENDING
+  ACTIVE
+  ENDED
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  displayName  String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  deletedAt    DateTime?
+
+  handle          CfHandle?
+  rating          PlayerRating?
+  verifications   HandleVerification[]
+  solved          UserSolved[]
+  ratingHistory   RatingHistory[]
+  matchPlayers    MatchPlayer[]
+  questionResults QuestionResult[]
+  submissions     Submission[]
+  reports         Report[]
+}
+
+model CfHandle {
+  userId             String    @id @db.Uuid
+  handle             String
+  handleNorm         String    @unique
+  cfRatingAtLink     Int?
+  verifiedAt         DateTime
+  solvedSyncedUpToId BigInt?
+  solvedSyncedAt     DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model HandleVerification {
+  id               String             @id @default(uuid()) @db.Uuid
+  userId           String             @db.Uuid
+  handle           String
+  handleNorm       String
+  problemContestId Int
+  problemIndex     String
+  startedAt        DateTime
+  expiresAt        DateTime
+  status           VerificationStatus @default(PENDING)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+}
+
+model UserSolved {
+  userId    String @db.Uuid
+  contestId Int
+  index     String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, contestId, index])
+}
+
+model Problem {
+  id          Int      @id @default(autoincrement())
+  contestId   Int
+  index       String
+  name        String
+  rating      Int
+  tags        String[]
+  solvedCount Int      @default(0)
+  isActive    Boolean  @default(true)
+  syncedAt    DateTime
+
+  sheetProblems    LevelSheetProblem[]
+  matchQuestions   MatchQuestion[]
+
+  @@unique([contestId, index])
+  @@index([isActive, rating])
+}
+
+model LevelSheet {
+  id             String   @id @default(uuid()) @db.Uuid
+  slug           String   @unique
+  name           String
+  description    String   @default("")
+  minRating      Int
+  maxRating      Int
+  includeTags    String[] @default([])
+  excludeTags    String[] @default([])
+  minSolvedCount Int
+  questionCount  Int
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+
+  problems LevelSheetProblem[]
+  matches  Match[]
+}
+
+model LevelSheetProblem {
+  sheetId   String @db.Uuid
+  problemId Int
+
+  sheet   LevelSheet @relation(fields: [sheetId], references: [id], onDelete: Cascade)
+  problem Problem    @relation(fields: [problemId], references: [id], onDelete: Cascade)
+
+  @@id([sheetId, problemId])
+}
+
+model PlayerRating {
+  userId        String   @id @db.Uuid
+  rating        Int
+  matchesPlayed Int      @default(0)
+  wins          Int      @default(0)
+  losses        Int      @default(0)
+  draws         Int      @default(0)
+  peakRating    Int
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([rating(sort: Desc)])
+}
+
+model RatingHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  matchId   String   @db.Uuid
+  before    Int
+  after     Int
+  delta     Int
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([matchId])
+}
+
+model Match {
+  id            String          @id @default(uuid()) @db.Uuid
+  status        MatchStatus     @default(LOBBY)
+  mode          MatchMode
+  roomCode      String?
+  sheetId       String          @db.Uuid
+  questionCount Int
+  createdAt     DateTime        @default(now())
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  winnerUserId  String?         @db.Uuid
+  endReason     MatchEndReason?
+  pausedTotalMs Int             @default(0)
+
+  sheet         LevelSheet      @relation(fields: [sheetId], references: [id])
+  players       MatchPlayer[]
+  questions     MatchQuestion[]
+  ratingHistory RatingHistory[]
+  reports       Report[]
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model MatchPlayer {
+  matchId      String       @db.Uuid
+  userId       String       @db.Uuid
+  handleNorm   String
+  ratingBefore Int
+  ratingAfter  Int?
+  totalScore   Int          @default(0)
+  result       MatchResult?
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@id([matchId, userId])
+  @@index([userId, matchId])
+}
+
+model MatchQuestion {
+  id                   String         @id @default(uuid()) @db.Uuid
+  matchId              String         @db.Uuid
+  idx                  Int
+  problemId            Int
+  status               QuestionStatus @default(PENDING)
+  startedAt            DateTime?
+  deadlineAt           DateTime?
+  endedAt              DateTime?
+  baselineSubmissionId BigInt?
+
+  match       Match            @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  problem     Problem          @relation(fields: [problemId], references: [id])
+  results     QuestionResult[]
+  submissions Submission[]
+
+  @@unique([matchId, idx])
+}
+
+model QuestionResult {
+  matchQuestionId String  @db.Uuid
+  userId          String  @db.Uuid
+  solvedAtMs      BigInt?
+  timeToSolveMs   Int?
+  wrongAttempts   Int     @default(0)
+  points          Int     @default(0)
+  firstSolve      Boolean @default(false)
+
+  question MatchQuestion @relation(fields: [matchQuestionId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id])
+
+  @@id([matchQuestionId, userId])
+}
+
+model Submission {
+  id              BigInt    @id
+  matchQuestionId String    @db.Uuid
+  userId          String    @db.Uuid
+  verdict         String?
+  creationTimeSec Int
+  firstSeenAt     DateTime  @default(now())
+  finalAt         DateTime?
+
+  question MatchQuestion @relation(fields: [matchQuestionId], references: [id], onDelete: Cascade)
+  user     User          @relation(fields: [userId], references: [id])
+
+  @@index([matchQuestionId])
+}
+
+model Report {
+  id         String       @id @default(uuid()) @db.Uuid
+  matchId    String       @db.Uuid
+  reporterId String       @db.Uuid
+  reason     String
+  status     ReportStatus @default(OPEN)
+  createdAt  DateTime     @default(now())
+
+  match    Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  reporter User  @relation(fields: [reporterId], references: [id])
+
+  @@index([status, createdAt])
+}

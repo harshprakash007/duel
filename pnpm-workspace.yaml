@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  esbuild: true
+  argon2: true
+  prisma: true
+  '@prisma/engines': true
+  '@prisma/client': true
+  msgpackr-extract: true
+  protobufjs: true
+  '@parcel/watcher': true
+  '@tailwindcss/oxide': true
