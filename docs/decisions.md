@@ -27,3 +27,24 @@ Newest entries go at the bottom of each milestone section.
 - **Verification problem pool** defaults to `4A, 71A, 231A, 158A, 282A` (configurable via `HANDLE_VERIFY_PROBLEMS`).
 - **No-commit-remote:** commits are local only; no remote configured.
 - **Host port mappings:** Compose maps Postgres to host 5435 and Redis to host 6385 (`HOST_PGPORT` / `HOST_REDISPORT` configurable) to avoid conflicts with other local services on default ports (5432/6379).
+
+## M1 — Codeforces Client
+
+- **Real Codeforces Probe Results (`pnpm cf:probe`):**
+  - Host tested: local machine (Linux, Node v24.4.1).
+  - All 4 endpoints succeeded without authentication:
+    - `problemset.problems`: 11,467 problems and statistics validated (1570ms).
+    - `problemset.recentStatus(10)`: validated 10 submissions with BigInt IDs (402ms, max ID: 395081078).
+    - `user.info(['tourist'])`: successfully returned handle 'tourist', rating 3380, rank 'legendary grandmaster' (675ms).
+    - `user.status('tourist', 1, 5)`: returned 5 historical submissions (392ms).
+  - Verdict: Codeforces API is completely accessible and responsive with the specified User-Agent and schema.
+- **Limiter design:**
+  - Token bucket with 3 priority lanes (`high`, `normal`, `low`) and strict priority draining.
+  - An aging guard (default 5,000ms) prevents starvation of low-priority sync jobs during bursts of player-triggered activity.
+  - Active scheduled refill timers maintain Node event loop activity so processes do not exit prematurely while requests are enqueued.
+- **Circuit breaker & error differentiation:**
+  - Circuit breaker trips to `DEGRADED` after `degradedAfterFailures` (default 4) consecutive retryable failures (5xx, timeouts, 429 / "limit" comments).
+  - User not found (e.g., non-existent handle) is normalized as `CfUserNotFoundError` (non-retryable, does not increment circuit breaker failures).
+  - First successful request automatically clears `DEGRADED` back to `OK` and emits `stateChange` and `recovered` events.
+- **Fake Codeforces Server:**
+  - Embedded Express in-memory server with seedable problems, statistics, users, controllable submissions (TESTING -> final transitions), outage simulation, failure injectors (`500`, `rate-limit`, `timeout`, `network`), and `recentStatus` window truncation.
