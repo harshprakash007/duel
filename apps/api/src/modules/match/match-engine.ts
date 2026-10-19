@@ -746,6 +746,10 @@ export class MatchEngine {
     // Clear user active match pointers in Redis
     for (const p of playersList) {
       await this.redis.del(`match:user:${p.userId}`);
+      const active = await this.redis.get(`active:${p.userId}`);
+      if (active && active.startsWith('match:')) {
+        await this.redis.del(`active:${p.userId}`);
+      }
     }
 
     await this.saveSnapshot(match);

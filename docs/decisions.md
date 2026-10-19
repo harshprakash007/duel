@@ -146,3 +146,33 @@ Newest entries go at the bottom of each milestone section.
   - Outage handling: Codeforces circuit trips to `DEGRADED` freeze question countdowns, record `pausedAtMs`, and emit `system:cf_degraded`. When recovered, deadlines extend by the exact paused duration, emitting `system:cf_recovered`. Aborts with `ABORT_CF_OUTAGE` after 10m outage.
   - Boot recovery: Server start loads all `COUNTDOWN` and `ACTIVE` matches from Postgres + Redis snapshots, calculates remaining durations against absolute deadlines, and re-arms in-memory timers.
 
+## M6 — Matchmaking & Queues
+
+- **Ranked Matchmaking Queues & Ticket Architecture:**
+  - Queues are partitioned per level sheet in Redis sorted sets: `mm:queue:{sheetId}`, scored by `enqueuedAtMs` for FIFO fairness.
+  - Player metadata and rating are stored in Redis hash `mm:ticket:{userId}` with 24h TTL.
+  - Periodic queue status broadcast runs every 2s (`broadcastQueueStatus`), emitting `{ waitedMs, window, serverNow }` to queued users.
+- **Single Activity Guard (`active:{userId}`):**
+  - Redis key `active:{userId}` holds values `queue:{sheetId}`, `room:{code}`, or `match:{matchId}` with 24-hour TTL.
+  - Prevents players from queueing, creating rooms, or joining rooms while already engaged.
+  - Stale keys (expired rooms, terminated matches, or cancelled tickets) are auto-detected and self-healed on new actions.
+  - Socket disconnects automatically purge active queue tickets and release the activity lock.
+- **Expanding Rating Window Algorithm:**
+  - Formula: $\text{window}(\text{waitSec}) = \min(100 + 50 \times \lfloor\text{waitSec} / 5\rfloor, 600)$.
+  - Symmetric pairing condition: $|R_A - R_B| \le \min(W_A, W_B)$, guaranteeing both players agree on the expanded rating gap before matching.
+- **Repeat Opponent Suppression (§9):**
+  - Prevents pairing against opponents from a player's last 3 matches (`recentOpponentCount = 3`).
+  - Automatically waived once the player has waited at least 60 seconds (`recentOpponentWaiveMs = 60000`).
+- **Atomic Lua Pairing (`PAIR_TICKETS_LUA`):**
+  - Atomically verifies both tickets exist in `mm:queue:{sheetId}`, removes them with `ZREM`, deletes `mm:ticket:{userId}` keys, and transitions `active:{userId}` to `match:pending`.
+  - Eliminates double-pairing race conditions in concurrent multi-instance deployments.
+- **Private Custom Rooms (§9, §15):**
+  - 6-character room codes drawn from unambiguous alphanumeric alphabet (`ROOM_CODE_ALPHABET`: no 0/O, 1/I/L) with 10-minute TTL in Redis (`room:{roomCode}`).
+  - Creator selects sheet and question count (3–5). Matches start in `LOBBY` status and transition to `COUNTDOWN` only upon mutual `match:ready` acknowledgement.
+  - Private matches are unrated (no Elo modifications).
+- **No-Show Detection & Requeueing (§9):**
+  - 20s presence timer (`MATCH_NO_SHOW_TIMEOUT_MS = 20000`) arms upon match creation.
+  - If either player is not connected, the match is aborted without rating changes (`ABORT_NO_SHOW`).
+  - The connected player is immediately restored to the queue with their original enqueue timestamp, preserving queue priority and window expansion.
+- **Active Match Reconnection Endpoint:**
+  - `GET /api/me/active-match` (and `/api/matches/active-match`) returns current match state snapshot for active matches, or `{ match: null }` when idle.

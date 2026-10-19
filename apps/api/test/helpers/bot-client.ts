@@ -153,6 +153,35 @@ export class BotClient {
     });
   }
 
+  public async joinQueue(sheetSlug: string): Promise<{ ok: boolean; error?: string }> {
+    return new Promise((resolve) => {
+      this.socket.emit('queue:join', { sheetSlug }, (res) => resolve(res));
+    });
+  }
+
+  public async leaveQueue(): Promise<{ ok: boolean }> {
+    return new Promise((resolve) => {
+      this.socket.emit('queue:leave', (res) => resolve(res));
+    });
+  }
+
+  public async createRoom(
+    sheetSlug: string,
+    questionCount?: number,
+  ): Promise<{ ok: boolean; roomCode?: string; error?: string }> {
+    return new Promise((resolve) => {
+      this.socket.emit('room:create', { sheetSlug, questionCount }, (res) => resolve(res));
+    });
+  }
+
+  public async joinRoom(
+    roomCode: string,
+  ): Promise<{ ok: boolean; matchId?: string; error?: string }> {
+    return new Promise((resolve) => {
+      this.socket.emit('room:join', { roomCode }, (res) => resolve(res));
+    });
+  }
+
   public disconnect(): void {
     this.socket.disconnect();
   }

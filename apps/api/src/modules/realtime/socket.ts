@@ -8,6 +8,7 @@ import { verifyAuthToken } from '../auth/jwt';
 import type { MatchEngine } from '../match/match-engine';
 import { toMatchStateSnapshot } from '../match/match-engine.types';
 import type { PollerService } from '../poller/poller.service';
+import type { MatchmakingService } from '../matchmaking/matchmaking.service';
 import type { ClientToServerEvents, ServerToClientEvents } from '@duel/shared';
 
 export interface SocketData {
@@ -45,8 +46,10 @@ export function createSocketServer(params: {
   logger: Logger;
   matchEngine: MatchEngine;
   pollerService: PollerService;
+  matchmakingService?: MatchmakingService;
 }): SocketServerInstance {
-  const { httpServer, redis, config, logger, matchEngine, pollerService } = params;
+  const { httpServer, redis, config, logger, matchEngine, pollerService, matchmakingService } =
+    params;
 
   const pubClient = redis.duplicate();
   const subClient = redis.duplicate();
@@ -71,15 +74,35 @@ export function createSocketServer(params: {
     adapter: createAdapter(pubClient, subClient),
   });
 
-  // Wire MatchEngine emitter to Socket.IO
-  matchEngine.setEmitter({
+  // Wire MatchEngine & MatchmakingService emitters to Socket.IO
+  const emitter = {
     emitToMatch: (matchId: string, event: string, data: unknown) => {
       io.to(`match:${matchId}`).emit(event as keyof ServerToClientEvents, data as never);
     },
     emitToUser: (userId: string, event: string, data: unknown) => {
       io.to(`user:${userId}`).emit(event as keyof ServerToClientEvents, data as never);
+      if (
+        event === 'match:found' &&
+        typeof data === 'object' &&
+        data !== null &&
+        'matchId' in data
+      ) {
+        const matchId = (data as { matchId: string }).matchId;
+        const userRoom = io.sockets.adapter.rooms.get(`user:${userId}`);
+        const hasConnectedSockets = userRoom !== undefined && userRoom.size > 0;
+        if (hasConnectedSockets) {
+          void io.in(`user:${userId}`).socketsJoin(`match:${matchId}`);
+          const activeMatch = matchEngine.getActiveMatch(matchId);
+          if (activeMatch && activeMatch.players[userId]) {
+            activeMatch.players[userId].connected = true;
+          }
+        }
+      }
     },
-  });
+  };
+
+  matchEngine.setEmitter(emitter);
+  matchmakingService?.setEmitter(emitter);
 
   // Authentication handshake middleware
   io.use((socket, next) => {
@@ -132,6 +155,16 @@ export function createSocketServer(params: {
       } catch (err) {
         logger.error({ err, userId }, 'Error updating player disconnect status');
       }
+
+      // If user was queued, remove ticket on disconnect
+      try {
+        const active = await redis.get(`active:${userId}`);
+        if (active && active.startsWith('queue:')) {
+          await matchmakingService?.leaveQueue(userId);
+        }
+      } catch (err) {
+        logger.error({ err, userId }, 'Error removing queued user on disconnect');
+      }
     });
 
     socket.on('match:ready', async (ack) => {
@@ -139,6 +172,10 @@ export function createSocketServer(params: {
         const activeMatch = await matchEngine.getActiveMatchForUser(userId);
         if (!activeMatch) {
           return ack({ ok: false, error: 'No active match found' });
+        }
+        socket.join(`match:${activeMatch.matchId}`);
+        if (activeMatch.players[userId]) {
+          activeMatch.players[userId].connected = true;
         }
         const ok = await matchEngine.playerReady(activeMatch.matchId, userId);
         ack({ ok });
@@ -196,20 +233,52 @@ export function createSocketServer(params: {
       }
     });
 
-    socket.on('queue:join', (_, ack) => {
-      ack({ ok: false, error: 'Matchmaking queue not active in this milestone' });
+    socket.on('queue:join', async (data, ack) => {
+      if (!matchmakingService) {
+        return ack({ ok: false, error: 'Matchmaking service not available' });
+      }
+      try {
+        const res = await matchmakingService.joinQueue(userId, data.sheetSlug);
+        ack(res);
+      } catch (err: unknown) {
+        ack({ ok: false, error: err instanceof Error ? err.message : 'Failed to join queue' });
+      }
     });
 
-    socket.on('queue:leave', (ack) => {
-      ack({ ok: true });
+    socket.on('queue:leave', async (ack) => {
+      if (!matchmakingService) {
+        return ack({ ok: true });
+      }
+      try {
+        const res = await matchmakingService.leaveQueue(userId);
+        ack(res);
+      } catch {
+        ack({ ok: false });
+      }
     });
 
-    socket.on('room:create', (_, ack) => {
-      ack({ ok: false, error: 'Custom room creation not active in this milestone' });
+    socket.on('room:create', async (data, ack) => {
+      if (!matchmakingService) {
+        return ack({ ok: false, error: 'Matchmaking service not available' });
+      }
+      try {
+        const res = await matchmakingService.createRoom(userId, data.sheetSlug, data.questionCount);
+        ack(res);
+      } catch (err: unknown) {
+        ack({ ok: false, error: err instanceof Error ? err.message : 'Failed to create room' });
+      }
     });
 
-    socket.on('room:join', (_, ack) => {
-      ack({ ok: false, error: 'Custom room join not active in this milestone' });
+    socket.on('room:join', async (data, ack) => {
+      if (!matchmakingService) {
+        return ack({ ok: false, error: 'Matchmaking service not available' });
+      }
+      try {
+        const res = await matchmakingService.joinRoom(userId, data.roomCode);
+        ack(res);
+      } catch (err: unknown) {
+        ack({ ok: false, error: err instanceof Error ? err.message : 'Failed to join room' });
+      }
     });
   });
 

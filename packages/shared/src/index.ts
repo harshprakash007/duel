@@ -4,3 +4,4 @@ export * from './schemas/handles';
 export * from './schemas/sheets';
 export * from './scoring';
 export * from './schemas/socket.types';
+export * from './matchmaking';

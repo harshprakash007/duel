@@ -22,6 +22,8 @@ import { LeaderLock } from './lib/leader-lock';
 import { createAdminRouter } from './modules/admin/admin.router';
 import { createRateLimiter } from './lib/rate-limiter';
 import { MatchEngine } from './modules/match/match-engine';
+import { createMatchesRouter } from './modules/match/matches.router';
+import { MatchmakingService } from './modules/matchmaking/matchmaking.service';
 import { createSocketServer, type SocketServerInstance } from './modules/realtime/socket';
 
 export interface RunningServer {
@@ -41,6 +43,7 @@ export interface RunningServer {
   pollerService: PollerService;
   leaderLock: LeaderLock;
   matchEngine: MatchEngine;
+  matchmakingService: MatchmakingService;
   socketServer: SocketServerInstance;
   port: number;
   close: () => Promise<void>;
@@ -97,6 +100,11 @@ export async function startServer(
   const catalogSyncQueue = new CatalogSyncQueue(redis, config, logger, catalogSyncService);
   const pollerService = new PollerService(cfClient, config, logger);
   const matchEngine = new MatchEngine(prisma, redis, pollerService, pickerService, config, logger);
+  const matchmakingService = new MatchmakingService(prisma, redis, matchEngine, config, logger, {
+    onSolvedSync: async (userId, handle) => {
+      await solvedSetService.syncUserSolved(userId, handle);
+    },
+  });
 
   pollerService.addListener({
     onVerdict: (event) => {
@@ -115,12 +123,13 @@ export async function startServer(
     renewMs: config.leader.renewMs,
     logger,
     onAcquired: async () => {
-      logger.info('Instance acquired leadership; starting poller');
-      await pollerService.start();
+      logger.info('Instance acquired leadership; starting poller and matchmaking');
+      await Promise.all([pollerService.start(), matchmakingService.start()]);
     },
     onLost: async () => {
-      logger.warn('Instance lost leadership; stopping poller');
+      logger.warn('Instance lost leadership; stopping poller and matchmaking');
       pollerService.stop();
+      matchmakingService.stop();
     },
   });
 
@@ -156,6 +165,7 @@ export async function startServer(
   const handlesRouter = createHandlesRouter(handlesService);
   const sheetsRouter = createSheetsRouter(sheetsService);
   const adminRouter = createAdminRouter(sheetsService, catalogSyncService);
+  const matchesRouter = createMatchesRouter(matchEngine);
 
   const app = createApp({
     config,
@@ -177,6 +187,8 @@ export async function startServer(
       ['/handles', handlesRouter],
       ['/sheets', sheetsRouter],
       ['/admin', adminRouter],
+      ['/matches', matchesRouter],
+      ['/me', matchesRouter],
     ],
   });
 
@@ -189,6 +201,7 @@ export async function startServer(
     logger,
     matchEngine,
     pollerService,
+    matchmakingService,
   });
 
   await matchEngine.recoverActiveMatches();
@@ -203,6 +216,7 @@ export async function startServer(
     (closing ??= (async () => {
       logger.info('shutting down');
       await leaderLock.stop();
+      matchmakingService.stop();
       matchEngine.destroy();
       pollerService.stop();
       await catalogSyncQueue.close();
@@ -229,6 +243,7 @@ export async function startServer(
     pollerService,
     leaderLock,
     matchEngine,
+    matchmakingService,
     socketServer,
     port,
     close,
