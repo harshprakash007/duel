@@ -226,3 +226,27 @@ Newest entries go at the bottom of each milestone section.
   - Paginated match history table with opponent details, score, outcomes, deltas, and direct links to match recap pages.
 - **Global Navigation & Reconnection (`components/Navbar.tsx`):**
   - Header bar with sound toggle button (🔊/🔇), Codeforces rating pill, quick links to Lobby and Leaderboard, active match reconnection pill, and user authentication menu.
+
+## M9 — Production Hardening, Observability, Admin Moderation & Chaos/Load Testing
+
+- **Full Prometheus Metrics (§18):**
+  - Exported via `GET /metrics` in standard Prometheus text exposition format using `prom-client`.
+  - Gauges: `duel_active_matches` (updated on match creation, recovery, finish, and abort) and `duel_active_sockets` (incremented on connection, decremented on disconnection).
+  - Histograms: `duel_poller_cycle_duration_seconds` (measures duration of each submission poll cycle), `duel_poller_detection_lag_seconds` (measures delay between Codeforces submission time and Duel solve detection), `duel_matchmaking_wait_duration_seconds` (measures queue wait duration before match formation).
+  - Counter: `duel_match_finalize_errors_total` (tracks atomic finalization transaction failures).
+  - Prunes finished/aborted matches from `MatchEngine.activeMatches` memory map upon conclusion to prevent memory leaks and keep gauges accurate.
+- **Account Deletion & Data Minimization (§17):**
+  - Implemented `DELETE /api/me` with password re-authentication and double-confirmation UI in user profile Danger Zone.
+  - Anonymization pattern: preserves historical match integrity while scrubbing personal data. Sets `displayName = 'Deleted User'`, `email = 'deleted-<userId>@duel.local'`, replaces `passwordHash` with an unmatchable hash, deletes `CfHandle`, `HandleVerification`, and `UserSolved` records, clears Redis active presence and matchmaking keys, and sets `deletedAt`.
+  - Authenticated requests using existing JWTs for deleted users fail with `NOT_FOUND` (404).
+- **Abuse Reporting & Admin Moderation (§17, §20):**
+  - Shared schemas in `packages/shared/src/schemas/reports.ts` for report submission and admin review.
+  - Match reporting endpoint `POST /api/matches/:id/report` with participant validation, duplicate prevention, and reason categorization (`CHEATING`, `OFFENSIVE_BEHAVIOR`, `BUG_EXPLOIT`, `OTHER`).
+  - Match voiding endpoint `POST /api/admin/matches/:id/void`: atomically rolls back rating adjustments using alphabetical row locks (`ORDER BY "userId" ASC FOR UPDATE`), decrements win/loss counters, records compensating `RatingHistory` entries with negative deltas, marks match `endReason: VOIDED`, and calls `rebuildLeaderboards()`.
+  - Admin portal (`/admin`) for users with `role: 'ADMIN'`: includes reports queue with filtering and resolution actions, level sheet overview, and manual problem catalog sync trigger.
+- **Chaos & Degradation Hardening (§19):**
+  - Verified mid-match crash resilience: simulated server kill mid-countdown/mid-question; on reboot, `MatchEngine.recoverActiveMatches()` reads pending matches from Postgres, re-arms memory state, calculates elapsed intervals, and allows players to rejoin seamlessly without state corruption.
+  - Verified Codeforces degradation handling: simulated circuit breaker `DEGRADED` state mid-match; verified that `pauseAndExtendDeadlines()` suspends match deadlines and extends them upon recovery by the outage duration, notifying both players via real-time socket events.
+- **Concurrent Load & Latency (§19):**
+  - Automated concurrent load test (`load.test.ts`) simulating 20 concurrent bot clients performing parallel room creation, joining, readying, and state rejoin snapshots.
+  - Achieved p95 latency under 300 ms and p50 under 150 ms with flat heap memory growth.

@@ -5,13 +5,19 @@ import { requireUser } from '../auth/auth.middleware';
 import type { Db } from '../../db/prisma';
 import {
   CF_PROBLEM_URL,
+  CreateReportInputSchema,
   type MatchRecapDto,
   type MatchRecapPlayerDto,
   type MatchRecapQuestionDto,
 } from '@duel/shared';
 import { AppError } from '../../lib/errors';
+import type { ReportsService } from '../reports/reports.service';
 
-export function createMatchesRouter(matchEngine: MatchEngine, db?: Db): Router {
+export function createMatchesRouter(
+  matchEngine: MatchEngine,
+  db?: Db,
+  reportsService?: ReportsService,
+): Router {
   const router = express.Router();
 
   router.get('/active-match', requireUser, async (req: Request, res: Response, next) => {
@@ -139,6 +145,23 @@ export function createMatchesRouter(matchEngine: MatchEngine, db?: Db): Router {
       };
 
       res.status(200).json(recap);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/:id/report', requireUser, async (req: Request, res: Response, next) => {
+    try {
+      if (!reportsService) {
+        throw new AppError('INTERNAL', 'Reports service not available');
+      }
+      const matchId = typeof req.params.id === 'string' ? req.params.id : '';
+      if (!matchId) {
+        throw new AppError('BAD_REQUEST', 'Match ID is required');
+      }
+      const input = CreateReportInputSchema.parse(req.body);
+      const result = await reportsService.createReport(req.user!.sub, matchId, input);
+      res.status(201).json(result);
     } catch (err) {
       next(err);
     }

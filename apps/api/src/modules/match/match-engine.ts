@@ -6,6 +6,7 @@ import type { PollerService } from '../poller/poller.service';
 import type { PickerService } from '../problems/picker.service';
 import type { PollerVerdictEvent } from '../poller/poller.types';
 import type { RatingsService, FinalizedMatchRatings } from '../ratings/ratings.service';
+import type { Metrics } from '../../lib/metrics';
 import {
   calculateScore,
   getQuestionCapMs,
@@ -62,7 +63,20 @@ export class MatchEngine {
     private readonly config: Config,
     private readonly logger: Logger,
     private readonly ratingsService?: RatingsService,
+    private readonly metrics?: Metrics,
   ) {}
+
+  private updateActiveMatchesMetric(): void {
+    if (this.metrics) {
+      let count = 0;
+      for (const m of this.activeMatches.values()) {
+        if (m.status === 'LOBBY' || m.status === 'COUNTDOWN' || m.status === 'ACTIVE') {
+          count++;
+        }
+      }
+      this.metrics.activeMatches.set(count);
+    }
+  }
 
   public setEmitter(emitter: MatchEngineEmitter): void {
     this.emitter = emitter;
@@ -217,6 +231,7 @@ export class MatchEngine {
     };
 
     this.activeMatches.set(activeMatch.matchId, activeMatch);
+    this.updateActiveMatchesMetric();
 
     // Register active user keys in Redis (TTL 24 hours)
     for (const p of data.players) {
@@ -723,44 +738,50 @@ export class MatchEngine {
 
     let finalizedRatings: FinalizedMatchRatings | null = null;
 
-    // Update DB in single transaction
-    await this.db.$transaction(async (tx) => {
-      if (match.mode === 'RANKED' && !isAborted && this.ratingsService) {
-        finalizedRatings = await this.ratingsService.finalizeMatchRatingsInTx(
-          matchId,
-          match.sheetId,
-          playerResults,
-          finalScores,
-          tx,
-        );
-      } else {
-        for (const p of playersList) {
-          await tx.matchPlayer.update({
-            where: {
-              matchId_userId: {
-                matchId,
-                userId: p.userId,
+    try {
+      // Update DB in single transaction
+      await this.db.$transaction(async (tx) => {
+        if (match.mode === 'RANKED' && !isAborted && this.ratingsService) {
+          finalizedRatings = await this.ratingsService.finalizeMatchRatingsInTx(
+            matchId,
+            match.sheetId,
+            playerResults,
+            finalScores,
+            tx,
+          );
+        } else {
+          for (const p of playersList) {
+            await tx.matchPlayer.update({
+              where: {
+                matchId_userId: {
+                  matchId,
+                  userId: p.userId,
+                },
               },
-            },
-            data: {
-              totalScore: p.score,
-              result: playerResults[p.userId] as MatchResult | null,
-            },
-          });
+              data: {
+                totalScore: p.score,
+                result: playerResults[p.userId] as MatchResult | null,
+              },
+            });
+          }
         }
-      }
 
-      await tx.match.update({
-        where: { id: matchId },
-        data: {
-          status: match.status as MatchStatus,
-          finishedAt: new Date(),
-          winnerUserId: winnerUserId ?? null,
-          endReason: endReason as DbMatchEndReason,
-          pausedTotalMs: match.pausedTotalMs,
-        },
+        await tx.match.update({
+          where: { id: matchId },
+          data: {
+            status: match.status as MatchStatus,
+            finishedAt: new Date(),
+            winnerUserId: winnerUserId ?? null,
+            endReason: endReason as DbMatchEndReason,
+            pausedTotalMs: match.pausedTotalMs,
+          },
+        });
       });
-    });
+    } catch (err) {
+      this.metrics?.matchFinalizeErrorsTotal.inc();
+      this.logger.error({ err, matchId }, 'Error finalizing match transaction');
+      throw err;
+    }
 
     if (finalizedRatings && this.ratingsService) {
       await this.ratingsService.applyPostFinalizeRedis(
@@ -796,6 +817,9 @@ export class MatchEngine {
       serverNow: Date.now(),
     });
     this.emitter?.emitToMatch(matchId, 'match:state', toMatchStateSnapshot(match));
+
+    this.activeMatches.delete(matchId);
+    this.updateActiveMatchesMetric();
   }
 
   public async resign(matchId: string, resigningUserId: string): Promise<boolean> {
@@ -992,6 +1016,7 @@ export class MatchEngine {
         this.logger.error({ err, matchId: record.id }, 'Failed to recover active match on boot');
       }
     }
+    this.updateActiveMatchesMetric();
   }
 
   public destroy(): void {
@@ -1002,5 +1027,6 @@ export class MatchEngine {
       this.poller.unregisterMatch(match.matchId);
     }
     this.activeMatches.clear();
+    this.metrics?.activeMatches.set(0);
   }
 }

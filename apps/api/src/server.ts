@@ -1,3 +1,4 @@
+import express from 'express';
 import { createServer, type Server } from 'node:http';
 import type { Config } from './config/index';
 import { createApp } from './app';
@@ -6,7 +7,7 @@ import { createMetrics, type Metrics } from './lib/metrics';
 import { createPrisma, type Db } from './db/prisma';
 import { createRedis, type Redis } from './db/redis';
 import { CfClient } from '@duel/cf-client';
-import { authMiddleware } from './modules/auth/auth.middleware';
+import { authMiddleware, requireUser } from './modules/auth/auth.middleware';
 import { AuthService } from './modules/auth/auth.service';
 import { createAuthRouter } from './modules/auth/auth.router';
 import { HandlesService } from './modules/handles/handles.service';
@@ -22,6 +23,7 @@ import { LeaderLock } from './lib/leader-lock';
 import { createAdminRouter } from './modules/admin/admin.router';
 import { createRateLimiter } from './lib/rate-limiter';
 import { MatchEngine } from './modules/match/match-engine';
+import { toMatchStateSnapshot } from './modules/match/match-engine.types';
 import { createMatchesRouter } from './modules/match/matches.router';
 import { MatchmakingService } from './modules/matchmaking/matchmaking.service';
 import { createSocketServer, type SocketServerInstance } from './modules/realtime/socket';
@@ -30,6 +32,7 @@ import { LeaderboardService } from './modules/leaderboard/leaderboard.service';
 import { createLeaderboardRouter } from './modules/leaderboard/leaderboard.router';
 import { UsersService } from './modules/users/users.service';
 import { createUsersRouter } from './modules/users/users.router';
+import { ReportsService } from './modules/reports/reports.service';
 
 export interface RunningServer {
   server: Server;
@@ -43,6 +46,7 @@ export interface RunningServer {
   sheetsService: SheetsService;
   catalogSyncService: CatalogSyncService;
   solvedSetService: SolvedSetService;
+  reportsService: ReportsService;
   pickerService: PickerService;
   catalogSyncQueue: CatalogSyncQueue;
   pollerService: PollerService;
@@ -106,7 +110,7 @@ export async function startServer(
   const catalogSyncService = new CatalogSyncService(prisma, cfClient, config, logger);
   const pickerService = new PickerService(prisma, config);
   const catalogSyncQueue = new CatalogSyncQueue(redis, config, logger, catalogSyncService);
-  const pollerService = new PollerService(cfClient, config, logger);
+  const pollerService = new PollerService(cfClient, config, logger, metrics);
   const ratingsService = new RatingsService(prisma, redis, config, logger);
   const matchEngine = new MatchEngine(
     prisma,
@@ -116,12 +120,22 @@ export async function startServer(
     config,
     logger,
     ratingsService,
+    metrics,
   );
-  const matchmakingService = new MatchmakingService(prisma, redis, matchEngine, config, logger, {
-    onSolvedSync: async (userId, handle) => {
-      await solvedSetService.syncUserSolved(userId, handle);
+  const matchmakingService = new MatchmakingService(
+    prisma,
+    redis,
+    matchEngine,
+    config,
+    logger,
+    {
+      onSolvedSync: async (userId, handle) => {
+        await solvedSetService.syncUserSolved(userId, handle);
+      },
     },
-  });
+    metrics,
+  );
+  const reportsService = new ReportsService(prisma, logger);
 
   pollerService.addListener({
     onVerdict: (event) => {
@@ -181,12 +195,45 @@ export async function startServer(
   const authRouter = createAuthRouter(authService, config);
   const handlesRouter = createHandlesRouter(handlesService);
   const sheetsRouter = createSheetsRouter(sheetsService);
-  const adminRouter = createAdminRouter(sheetsService, catalogSyncService);
+  const adminRouter = createAdminRouter(
+    sheetsService,
+    catalogSyncService,
+    reportsService,
+    ratingsService,
+  );
   const leaderboardService = new LeaderboardService(prisma, redis, config);
   const leaderboardRouter = createLeaderboardRouter(leaderboardService);
   const usersService = new UsersService(prisma, redis, config);
-  const usersRouter = createUsersRouter(usersService);
-  const matchesRouter = createMatchesRouter(matchEngine, prisma);
+  const usersRouter = createUsersRouter(
+    usersService,
+    config.auth.cookieName,
+    config.auth.cookieSecure,
+  );
+  const matchesRouter = createMatchesRouter(matchEngine, prisma, reportsService);
+
+  const meRouter = express.Router();
+  meRouter.get('/active-match', requireUser, async (req, res, next) => {
+    try {
+      const match = await matchEngine.getActiveMatchForUser(req.user!.sub);
+      res.status(200).json({ match: match ? toMatchStateSnapshot(match) : null });
+    } catch (err) {
+      next(err);
+    }
+  });
+  meRouter.delete('', requireUser, async (req, res, next) => {
+    try {
+      await usersService.deleteAccount(req.user!.sub);
+      res.clearCookie(config.auth.cookieName, {
+        httpOnly: true,
+        secure: config.auth.cookieSecure,
+        sameSite: 'lax',
+        path: '/',
+      });
+      res.status(200).json({ ok: true, message: 'Account deleted' });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   const app = createApp({
     config,
@@ -211,7 +258,7 @@ export async function startServer(
       ['/leaderboard', leaderboardRouter],
       ['/users', usersRouter],
       ['/matches', matchesRouter],
-      ['/me', matchesRouter],
+      ['/me', meRouter],
     ],
   });
 
@@ -225,6 +272,7 @@ export async function startServer(
     matchEngine,
     pollerService,
     matchmakingService,
+    metrics,
   });
 
   await matchEngine.recoverActiveMatches();
@@ -262,6 +310,7 @@ export async function startServer(
     sheetsService,
     catalogSyncService,
     solvedSetService,
+    reportsService,
     pickerService,
     catalogSyncQueue,
     pollerService,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
+import { Flag } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { useSocketStore } from '../store/socket';
 import { apiFetch } from '../api/client';
@@ -24,6 +25,11 @@ export function MatchPage() {
   const [hintCooldown, setHintCooldown] = useState<number>(0);
   const [showResignModal, setShowResignModal] = useState<boolean>(false);
   const [isResigning, setIsResigning] = useState<boolean>(false);
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [reportReason, setReportReason] = useState<string>('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSuccess, setReportSuccess] = useState<boolean>(false);
 
   // Restore active match if page refreshed
   useEffect(() => {
@@ -104,6 +110,28 @@ export function MatchPage() {
     }
   };
 
+  const handleSubmitReport = async () => {
+    if (!activeMatch) return;
+    setIsSubmittingReport(true);
+    setReportError(null);
+    try {
+      await apiFetch(`/api/matches/${activeMatch.matchId}/report`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reportReason.trim() }),
+      });
+      setReportSuccess(true);
+      setTimeout(() => {
+        setShowReportModal(false);
+        setReportReason('');
+        setReportSuccess(false);
+      }, 1500);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Failed to submit report');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
+
   if (!activeMatch) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -171,6 +199,14 @@ export function MatchPage() {
             </div>
           </div>
 
+          <button
+            onClick={() => setShowReportModal(true)}
+            className="rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+            title="Report Match"
+          >
+            <Flag className="w-3.5 h-3.5 text-slate-400" />
+            Report
+          </button>
           <button
             onClick={() => setShowResignModal(true)}
             className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors"
@@ -334,6 +370,53 @@ export function MatchPage() {
           )}
         </div>
       </div>
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-indigo-400" />
+              Report Match
+            </h3>
+            <p className="mt-2 text-sm text-slate-400">
+              Report suspected cheating, outside assistance, or unsportsmanlike behavior.
+            </p>
+            <textarea
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="Describe the issue (minimum 5 characters)..."
+              rows={4}
+              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white focus:border-indigo-500 focus:outline-none"
+            />
+            {reportError && <p className="mt-2 text-xs text-rose-400">{reportError}</p>}
+            {reportSuccess && (
+              <p className="mt-2 text-xs text-emerald-400">Report submitted successfully.</p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportReason('');
+                  setReportError(null);
+                  setReportSuccess(false);
+                }}
+                disabled={isSubmittingReport}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitReport}
+                disabled={isSubmittingReport || reportReason.trim().length < 5 || reportSuccess}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Resign Confirmation Modal */}
       {showResignModal && (

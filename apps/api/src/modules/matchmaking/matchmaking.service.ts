@@ -2,6 +2,7 @@ import type { Db } from '../../db/prisma';
 import type { Redis } from '../../db/redis';
 import type { Config } from '../../config/index';
 import type { Logger } from '../../lib/logger';
+import type { Metrics } from '../../lib/metrics';
 import type { MatchEngine } from '../match/match-engine';
 import { type MatchEngineEmitter, toMatchStateSnapshot } from '../match/match-engine.types';
 import { calculateMatchmakingWindow, generateRoomCode, isRatingWithinWindow } from '@duel/shared';
@@ -25,6 +26,7 @@ export class MatchmakingService {
     private readonly callbacks?: {
       onSolvedSync?: (userId: string, handle: string) => Promise<void>;
     },
+    private readonly metrics?: Metrics,
   ) {}
 
   public setEmitter(emitter: MatchEngineEmitter): void {
@@ -495,6 +497,15 @@ export class MatchmakingService {
             if (res === 1) {
               matchedThisTick.add(ticketA.userId);
               matchedThisTick.add(partnerB.userId);
+
+              if (this.metrics) {
+                this.metrics.matchmakingWaitSeconds.observe(
+                  Math.max(0, (now - ticketA.enqueuedAtMs) / 1000),
+                );
+                this.metrics.matchmakingWaitSeconds.observe(
+                  Math.max(0, (now - partnerB.enqueuedAtMs) / 1000),
+                );
+              }
 
               try {
                 // Create ranked match via MatchEngine

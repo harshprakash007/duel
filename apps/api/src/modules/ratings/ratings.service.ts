@@ -4,6 +4,7 @@ import type { Config } from '../../config/index';
 import type { Logger } from '../../lib/logger';
 import { calculateMatchEloDeltas, type MatchOutcome, type MatchEloResult } from '@duel/shared';
 import type { Prisma } from '../../generated/prisma/client';
+import { AppError } from '../../lib/errors';
 
 export interface FinalizedMatchRatings {
   ratings: Record<string, { before: number; after: number; delta: number }>;
@@ -300,5 +301,115 @@ export class RatingsService {
       { globalCount: qualifiedRatings.length, sheetsCount: sheets.length },
       'Leaderboards rebuild complete',
     );
+  }
+
+  /**
+   * Authoritatively voids a match.
+   * If the match was ranked and ratings were changed, reverses rating deltas atomically
+   * and resyncs the leaderboards.
+   */
+  public async voidMatchRatings(
+    matchId: string,
+  ): Promise<{ ok: boolean; reversed: boolean; message: string }> {
+    const match = await this.db.match.findUnique({
+      where: { id: matchId },
+      include: {
+        players: true,
+        ratingHistory: true,
+      },
+    });
+
+    if (!match) {
+      throw new AppError('NOT_FOUND', 'Match not found');
+    }
+
+    if (match.endReason === 'VOIDED') {
+      return { ok: true, reversed: false, message: 'Match is already voided' };
+    }
+
+    const hasRankedHistory = match.mode === 'RANKED' && match.ratingHistory.length === 2;
+
+    if (hasRankedHistory) {
+      const sortedUserIds = match.players.map((p) => p.userId).sort();
+      const user0 = sortedUserIds[0]!;
+      const user1 = sortedUserIds[1]!;
+
+      await this.db.$transaction(async (tx) => {
+        // 1. Acquire row locks in consistent alphabetical order
+        await tx.$queryRaw`
+          SELECT "userId" FROM "PlayerRating"
+          WHERE "userId" IN (${user0}::uuid, ${user1}::uuid)
+          ORDER BY "userId" ASC FOR UPDATE
+        `;
+
+        for (const rh of match.ratingHistory) {
+          const pr = await tx.playerRating.findUnique({
+            where: { userId: rh.userId },
+          });
+
+          if (pr) {
+            const mp = match.players.find((p) => p.userId === rh.userId);
+            const isWin = mp?.result === 'WIN';
+            const isLoss = mp?.result === 'LOSS';
+            const isDraw = mp?.result === 'DRAW';
+
+            // Revert delta
+            const newRating = Math.max(this.config.elo.floor, pr.rating - rh.delta);
+            const matchesPlayed = Math.max(0, pr.matchesPlayed - 1);
+            const wins = isWin ? Math.max(0, pr.wins - 1) : pr.wins;
+            const losses = isLoss ? Math.max(0, pr.losses - 1) : pr.losses;
+            const draws = isDraw ? Math.max(0, pr.draws - 1) : pr.draws;
+
+            await tx.playerRating.update({
+              where: { userId: rh.userId },
+              data: {
+                rating: newRating,
+                matchesPlayed,
+                wins,
+                losses,
+                draws,
+              },
+            });
+
+            // Insert compensating rating history record
+            await tx.ratingHistory.create({
+              data: {
+                userId: rh.userId,
+                matchId,
+                before: pr.rating,
+                after: newRating,
+                delta: -rh.delta,
+              },
+            });
+          }
+        }
+
+        await tx.match.update({
+          where: { id: matchId },
+          data: {
+            status: 'ABORTED',
+            endReason: 'VOIDED',
+          },
+        });
+      });
+
+      // Resync Redis leaderboards
+      await this.rebuildLeaderboards();
+
+      this.logger.info({ matchId }, 'Match voided and ratings reversed');
+      return { ok: true, reversed: true, message: 'Match voided and ratings reversed' };
+    } else {
+      // Unranked, or aborted match without rating deltas
+      await this.db.match.update({
+        where: { id: matchId },
+        data: {
+          status: 'ABORTED',
+          endReason: 'VOIDED',
+        },
+      });
+
+      this.logger.info({ matchId }, 'Match voided without rating adjustments');
+      return { ok: true, reversed: false, message: 'Match voided (unrated or already aborted)' };
+    }
   }
 }

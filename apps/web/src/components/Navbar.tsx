@@ -35,6 +35,14 @@ export function Navbar() {
             <Link to="/leaderboard" className="text-slate-300 hover:text-white transition-colors">
               Leaderboard
             </Link>
+            {user?.role === 'ADMIN' && (
+              <Link
+                to="/admin"
+                className="text-indigo-400 hover:text-indigo-300 transition-colors font-bold"
+              >
+                Admin
+              </Link>
+            )}
           </nav>
         </div>
 

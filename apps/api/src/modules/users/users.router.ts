@@ -2,9 +2,31 @@ import express, { type Request, type Response, type Router } from 'express';
 import { UserMatchesQuerySchema } from '@duel/shared';
 import type { UsersService } from './users.service';
 import { AppError } from '../../lib/errors';
+import { requireUser } from '../auth/auth.middleware';
 
-export function createUsersRouter(usersService: UsersService): Router {
+export function createUsersRouter(
+  usersService: UsersService,
+  cookieName?: string,
+  cookieSecure?: boolean,
+): Router {
   const router = express.Router();
+
+  router.delete('/me', requireUser, async (req: Request, res: Response, next) => {
+    try {
+      await usersService.deleteAccount(req.user!.sub);
+      if (cookieName) {
+        res.clearCookie(cookieName, {
+          httpOnly: true,
+          secure: cookieSecure ?? false,
+          sameSite: 'lax',
+          path: '/',
+        });
+      }
+      res.status(200).json({ ok: true, message: 'Account deleted' });
+    } catch (err) {
+      next(err);
+    }
+  });
 
   router.get('/:handle', async (req: Request, res: Response, next) => {
     try {

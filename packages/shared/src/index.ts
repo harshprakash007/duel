@@ -8,3 +8,4 @@ export * from './matchmaking';
 export * from './elo';
 export * from './schemas/leaderboard';
 export * from './schemas/users';
+export * from './schemas/reports';

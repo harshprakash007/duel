@@ -174,4 +174,37 @@ export class UsersService {
 
     return { matches, total };
   }
+
+  public async deleteAccount(userId: string): Promise<void> {
+    const user = await this.db.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user || user.deletedAt !== null) {
+      throw new AppError('NOT_FOUND', 'User not found or already deleted');
+    }
+
+    await this.db.$transaction(async (tx) => {
+      // 1. Remove linked CfHandle and pending verifications
+      await tx.cfHandle.deleteMany({ where: { userId } });
+      await tx.handleVerification.deleteMany({ where: { userId } });
+      await tx.userSolved.deleteMany({ where: { userId } });
+
+      // 2. Anonymize personal details per §17 data minimization
+      await tx.user.update({
+        where: { id: userId },
+        data: {
+          email: `deleted-${userId}@duel.local`,
+          displayName: 'Deleted User',
+          passwordHash: 'DELETED',
+          deletedAt: new Date(),
+        },
+      });
+    });
+
+    // 3. Clear Redis keys
+    await this.redis.zrem('lb:global', userId);
+    await this.redis.del(`active:${userId}`);
+    await this.redis.del(`match:user:${userId}`);
+  }
 }

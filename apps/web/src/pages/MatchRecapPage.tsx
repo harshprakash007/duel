@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { Flag } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { apiFetch } from '../api/client';
 import type { MatchRecapDto } from '@duel/shared';
@@ -7,6 +9,11 @@ import type { MatchRecapDto } from '@duel/shared';
 export function MatchRecapPage() {
   const { id: matchId } = useParams<{ id: string }>();
   const { user } = useAuthStore();
+  const [showReportModal, setShowReportModal] = useState<boolean>(false);
+  const [reportReason, setReportReason] = useState<string>('');
+  const [isSubmittingReport, setIsSubmittingReport] = useState<boolean>(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSuccess, setReportSuccess] = useState<boolean>(false);
 
   const {
     data: match,
@@ -19,6 +26,28 @@ export function MatchRecapPage() {
     },
     enabled: Boolean(matchId),
   });
+
+  const handleSubmitReport = async () => {
+    if (!matchId) return;
+    setIsSubmittingReport(true);
+    setReportError(null);
+    try {
+      await apiFetch(`/api/matches/${matchId}/report`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reportReason.trim() }),
+      });
+      setReportSuccess(true);
+      setTimeout(() => {
+        setShowReportModal(false);
+        setReportReason('');
+        setReportSuccess(false);
+      }, 1500);
+    } catch (err) {
+      setReportError(err instanceof Error ? err.message : 'Failed to submit report');
+    } finally {
+      setIsSubmittingReport(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -232,12 +261,23 @@ export function MatchRecapPage() {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <Link
-          to="/leaderboard"
-          className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition-colors"
-        >
-          View Leaderboards
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/leaderboard"
+            className="rounded-xl border border-slate-700 bg-slate-800 px-5 py-2.5 text-sm font-semibold text-slate-200 hover:bg-slate-700 transition-colors"
+          >
+            View Leaderboards
+          </Link>
+          {user && (
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition-colors flex items-center gap-1.5"
+            >
+              <Flag className="w-4 h-4 text-slate-400" />
+              Report Match
+            </button>
+          )}
+        </div>
         <Link
           to="/play"
           className="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/30"
@@ -245,6 +285,53 @@ export function MatchRecapPage() {
           Play Another Duel
         </Link>
       </div>
+
+      {/* Report Modal */}
+      {showReportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+            <h3 className="text-xl font-bold text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-indigo-400" />
+              Report Match
+            </h3>
+            <p className="mt-2 text-sm text-slate-400">
+              Report suspected cheating, outside assistance, or unsportsmanlike behavior.
+            </p>
+            <textarea
+              value={reportReason}
+              onChange={(e) => setReportReason(e.target.value)}
+              placeholder="Describe the issue (minimum 5 characters)..."
+              rows={4}
+              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white focus:border-indigo-500 focus:outline-none"
+            />
+            {reportError && <p className="mt-2 text-xs text-rose-400">{reportError}</p>}
+            {reportSuccess && (
+              <p className="mt-2 text-xs text-emerald-400">Report submitted successfully.</p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowReportModal(false);
+                  setReportReason('');
+                  setReportError(null);
+                  setReportSuccess(false);
+                }}
+                disabled={isSubmittingReport}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitReport}
+                disabled={isSubmittingReport || reportReason.trim().length < 5 || reportSuccess}
+                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

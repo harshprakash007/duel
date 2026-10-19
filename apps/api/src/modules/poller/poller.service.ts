@@ -1,6 +1,7 @@
 import type { CfClient, CfSubmission } from '@duel/cf-client';
 import type { Config } from '../../config/index';
 import type { Logger } from '../../lib/logger';
+import type { Metrics } from '../../lib/metrics';
 import {
   isFinalVerdict,
   type ActiveMatchQuestion,
@@ -25,6 +26,7 @@ export class PollerService {
     private readonly cfClient: CfClient,
     private readonly config: Config,
     private readonly logger: Logger,
+    private readonly metrics?: Metrics,
   ) {}
 
   public register(
@@ -199,6 +201,9 @@ export class PollerService {
       this.logger.error({ err, durationMs: Date.now() - cycleStart }, 'Poller cycle failed');
     } finally {
       this.isCycleBusy = false;
+      if (this.metrics) {
+        this.metrics.pollerCycleSeconds.observe((Date.now() - cycleStart) / 1000);
+      }
     }
   }
 
@@ -330,6 +335,11 @@ export class PollerService {
     if (isFinal) {
       matchedEntry.pending.delete(sub.id);
       matchedEntry.processedSubmissions.add(sub.id);
+
+      if (this.metrics && sub.creationTimeSeconds > 0) {
+        const lagSec = Math.max(0, Date.now() / 1000 - sub.creationTimeSeconds);
+        this.metrics.pollerDetectionLagSeconds.observe(lagSec);
+      }
 
       const event: PollerVerdictEvent = {
         matchId: matchedEntry.matchId,

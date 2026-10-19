@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router';
+import { useParams, Link, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
+import { Trash2, AlertTriangle } from 'lucide-react';
+import { useAuthStore } from '../store/auth';
 import { apiFetch } from '../api/client';
 import type { UserProfileDto, UserMatchesResponseDto, RatingPointDto } from '@duel/shared';
 
@@ -136,6 +138,30 @@ export function UserProfilePage() {
   const { handle } = useParams<{ handle: string }>();
   const [matchPage, setMatchPage] = useState(0);
   const matchLimit = 10;
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const isOwnProfile = Boolean(
+    user && user.handle && handle && user.handle.handle.toLowerCase() === handle.toLowerCase(),
+  );
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiFetch('/api/me', { method: 'DELETE' });
+      logout();
+      navigate('/');
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete account');
+      setIsDeleting(false);
+    }
+  };
 
   // 1. Fetch user profile stats & sparkline
   const {
@@ -391,6 +417,77 @@ export function UserProfilePage() {
           </div>
         )}
       </div>
+
+      {/* Danger Zone: Account Deletion */}
+      {isOwnProfile && (
+        <div className="mt-8 rounded-2xl border border-rose-900/40 bg-rose-950/20 p-6 backdrop-blur">
+          <h3 className="text-base font-bold text-rose-300 flex items-center gap-2">
+            <Trash2 className="w-4 h-4" />
+            Danger Zone
+          </h3>
+          <p className="mt-1 text-xs text-slate-400">
+            Permanently delete your account. In accordance with data minimization, your email,
+            password, and linked Codeforces handle will be permanently removed and personal data
+            anonymized. Past match records and rating histories are preserved with anonymized
+            attribution.
+          </p>
+          <div className="mt-4">
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              className="rounded-xl border border-rose-700/60 bg-rose-900/40 px-4 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-900/60 transition-colors"
+            >
+              Delete Account
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Account Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-rose-400 mb-4">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="text-xl font-bold text-white">Permanently Delete Account?</h3>
+            </div>
+            <p className="text-sm text-slate-300 mb-4 leading-relaxed">
+              This action cannot be undone. All your personal data will be erased and your
+              Codeforces handle unlinked.
+            </p>
+            <p className="text-xs text-slate-400 mb-2">
+              Please type <strong className="text-rose-400 font-mono">DELETE</strong> to confirm:
+            </p>
+            <input
+              type="text"
+              value={deleteConfirmText}
+              onChange={(e) => setDeleteConfirmText(e.target.value)}
+              placeholder="DELETE"
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white focus:border-rose-500 focus:outline-none font-mono"
+            />
+            {deleteError && <p className="mt-2 text-xs text-rose-400">{deleteError}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setDeleteConfirmText('');
+                  setDeleteError(null);
+                }}
+                disabled={isDeleting}
+                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteAccount}
+                disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-40 transition-colors"
+              >
+                {isDeleting ? 'Deleting...' : 'Confirm Deletion'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

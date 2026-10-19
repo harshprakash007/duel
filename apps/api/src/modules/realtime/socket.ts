@@ -9,6 +9,7 @@ import type { MatchEngine } from '../match/match-engine';
 import { toMatchStateSnapshot } from '../match/match-engine.types';
 import type { PollerService } from '../poller/poller.service';
 import type { MatchmakingService } from '../matchmaking/matchmaking.service';
+import type { Metrics } from '../../lib/metrics';
 import type { ClientToServerEvents, ServerToClientEvents } from '@duel/shared';
 
 export interface SocketData {
@@ -47,9 +48,18 @@ export function createSocketServer(params: {
   matchEngine: MatchEngine;
   pollerService: PollerService;
   matchmakingService?: MatchmakingService;
+  metrics?: Metrics;
 }): SocketServerInstance {
-  const { httpServer, redis, config, logger, matchEngine, pollerService, matchmakingService } =
-    params;
+  const {
+    httpServer,
+    redis,
+    config,
+    logger,
+    matchEngine,
+    pollerService,
+    matchmakingService,
+    metrics,
+  } = params;
 
   const pubClient = redis.duplicate();
   const subClient = redis.duplicate();
@@ -126,6 +136,7 @@ export function createSocketServer(params: {
   });
 
   io.on('connection', async (socket) => {
+    metrics?.activeSockets.inc();
     const { userId } = socket.data;
     logger.debug({ userId, socketId: socket.id }, 'Socket connected');
 
@@ -146,6 +157,7 @@ export function createSocketServer(params: {
     }
 
     socket.on('disconnect', async () => {
+      metrics?.activeSockets.dec();
       logger.debug({ userId, socketId: socket.id }, 'Socket disconnected');
       try {
         const match = await matchEngine.getActiveMatchForUser(userId);
@@ -290,6 +302,7 @@ export function createSocketServer(params: {
       // Allow adapter unsubscribe commands to complete cleanly with Redis
       await new Promise((resolve) => setTimeout(resolve, 100));
       await Promise.allSettled([pubClient.quit(), subClient.quit()]);
+      metrics?.activeSockets.set(0);
     },
   };
 }

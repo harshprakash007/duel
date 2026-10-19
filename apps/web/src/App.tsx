@@ -12,6 +12,7 @@ import { MatchPage } from './pages/MatchPage';
 import { MatchRecapPage } from './pages/MatchRecapPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { UserProfilePage } from './pages/UserProfilePage';
+import { AdminPage } from './pages/AdminPage';
 
 const queryClient = new QueryClient();
 
@@ -74,12 +75,21 @@ export function App() {
               <Route path="/matches/:id" element={<MatchRecapPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/users/:handle" element={<UserProfilePage />} />
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute>
+                    <AdminPage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
-          <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-600">
-            Duel &middot; Real-time 1v1 Competitive Programming Platform &middot; Not affiliated
-            with Codeforces.
+          <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
+            Duel &middot; Real-time 1v1 Competitive Programming Platform &middot; Duel is an
+            independent competitive programming platform and is not affiliated with, endorsed by, or
+            sponsored by Codeforces.
           </footer>
         </div>
       </BrowserRouter>
