@@ -18,6 +18,8 @@ export const testEnv = (extra: Record<string, string> = {}): Record<string, stri
 });
 
 export async function cleanDb(db: Db): Promise<void> {
+  await db.submission.deleteMany();
+  await db.questionResult.deleteMany();
   await db.matchQuestion.deleteMany();
   await db.matchPlayer.deleteMany();
   await db.ratingHistory.deleteMany();

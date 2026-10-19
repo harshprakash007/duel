@@ -120,3 +120,29 @@ Newest entries go at the bottom of each milestone section.
 - **Verification CLI Tool (`pnpm poller:try`):**
   - Monitors real submissions on live Codeforces across two handles on a designated problem.
   - Automatically queries baselines for both handles and prints live detection events with elapsed time and end-to-end detection latency in seconds.
+
+## M5 — Match Engine & Realtime
+
+- **Pure Scoring Calculation (`packages/shared/src/scoring.ts`):**
+  - Formula: $\text{timeFactor} = 1 - 0.7 \times (\text{solveTimeMs} / \text{capMs})$.
+  - $\text{points} = \max(\text{round}(1000 \times \text{timeFactor}) - 50 \times \min(\text{wrongAttempts}, 6), 150)$.
+  - $+100$ bonus for earliest accepted submission (`isFirstSolve`). Unsolved problems score 0.
+  - Exactly reproduces the worked example: 15m cap, 5m solve, 1 wrong, first solve $\implies 767 - 50 + 100 = \mathbf{817}$.
+  - Penalty verdicts: `WRONG_ANSWER`, `RUNTIME_ERROR`, `TIME_LIMIT_EXCEEDED`, `MEMORY_LIMIT_EXCEEDED`, `IDLENESS_LIMIT_EXCEEDED`. Compilation errors and non-final verdicts do not incur wrong attempt penalties.
+- **Authoritative State Machine & Queue Concurrency Control:**
+  - Lifecycle: `LOBBY` $\to$ `COUNTDOWN` (5s) $\to$ `ACTIVE(Q0)` $\to$ `Q_BREAK` (5s) $\to$ ... $\to$ `FINISHED` / `ABORTED`.
+  - Concurrency control: per-match serial async task chain prevents race conditions between simultaneous verdicts, player submissions, and timer expirations. Internal state transitions use separate `do...` implementations to avoid self-deadlocking on nested enqueue calls.
+  - Post-First-Solve Rule: When the first player solves a question, the deadline shrinks to $\min(\text{currentDeadline}, \text{now} + 180\text{s})$. Deadline timers and PollerService registry are dynamically re-armed.
+  - When both players have solved, the question ends immediately without waiting for the remaining countdown.
+- **Socket.IO Realtime Protocol & Auth Handshake:**
+  - Scalable multi-instance WebSocket architecture using `@socket.io/redis-adapter` over duplicate Redis connections.
+  - JWT authentication handshake extracts tokens from cookies or Authorization headers, attaching user metadata.
+  - Client connections automatically join their private user room (`user:{userId}`) and active match room (`match:{matchId}`).
+  - State broadcasts always emit absolute UTC timestamps (`startedAtMs`, `deadlineAtMs`) and `serverNow` so clients render timers immune to local client clock skew.
+  - Clean shutdown dispatches disconnects and allows in-flight Redis adapter unsubscribe commands to settle before closing connections.
+- **Fault Tolerance & Crash Recovery:**
+  - Snapshots are written to Redis (`match:snapshot:{matchId}`) on every state transition (TTL 24 hours).
+  - Fast user lookup: `match:user:{userId}` tracks active match IDs for reconnects.
+  - Outage handling: Codeforces circuit trips to `DEGRADED` freeze question countdowns, record `pausedAtMs`, and emit `system:cf_degraded`. When recovered, deadlines extend by the exact paused duration, emitting `system:cf_recovered`. Aborts with `ABORT_CF_OUTAGE` after 10m outage.
+  - Boot recovery: Server start loads all `COUNTDOWN` and `ACTIVE` matches from Postgres + Redis snapshots, calculates remaining durations against absolute deadlines, and re-arms in-memory timers.
+

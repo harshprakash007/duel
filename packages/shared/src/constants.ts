@@ -4,8 +4,9 @@
  * the web app uses them only for previews. Nothing else should hard-code these numbers.
  */
 
-const SEC = 1000;
-const MIN = 60 * SEC;
+export const SEC = 1000;
+export const MIN = 60 * SEC;
+export const HOUR = 60 * MIN;
 
 export const MATCH_DEFAULTS = {
   questionCount: 3,

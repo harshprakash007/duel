@@ -85,6 +85,14 @@ export class PollerService {
     return this.registry;
   }
 
+  public updateDeadline(matchId: string, deadlineAtMs: number): void {
+    for (const entry of this.registry.values()) {
+      if (entry.matchId === matchId) {
+        entry.deadlineAtMs = deadlineAtMs;
+      }
+    }
+  }
+
   public getMaxSeenSubmissionId(): bigint | null {
     return this.maxSeenSubmissionId;
   }

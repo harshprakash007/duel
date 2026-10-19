@@ -21,6 +21,8 @@ import { PollerService } from './modules/poller/poller.service';
 import { LeaderLock } from './lib/leader-lock';
 import { createAdminRouter } from './modules/admin/admin.router';
 import { createRateLimiter } from './lib/rate-limiter';
+import { MatchEngine } from './modules/match/match-engine';
+import { createSocketServer, type SocketServerInstance } from './modules/realtime/socket';
 
 export interface RunningServer {
   server: Server;
@@ -38,6 +40,8 @@ export interface RunningServer {
   catalogSyncQueue: CatalogSyncQueue;
   pollerService: PollerService;
   leaderLock: LeaderLock;
+  matchEngine: MatchEngine;
+  socketServer: SocketServerInstance;
   port: number;
   close: () => Promise<void>;
 }
@@ -92,6 +96,17 @@ export async function startServer(
   const pickerService = new PickerService(prisma, config);
   const catalogSyncQueue = new CatalogSyncQueue(redis, config, logger, catalogSyncService);
   const pollerService = new PollerService(cfClient, config, logger);
+  const matchEngine = new MatchEngine(prisma, redis, pollerService, pickerService, config, logger);
+
+  pollerService.addListener({
+    onVerdict: (event) => {
+      void matchEngine.handleVerdict(event);
+    },
+  });
+
+  cfClient.on('stateChange', (status) => {
+    matchEngine.handleCfStateChange(status === 'DEGRADED');
+  });
 
   const leaderLock = new LeaderLock({
     redis,
@@ -166,6 +181,18 @@ export async function startServer(
   });
 
   const server = createServer(app);
+
+  const socketServer = createSocketServer({
+    httpServer: server,
+    redis,
+    config,
+    logger,
+    matchEngine,
+    pollerService,
+  });
+
+  await matchEngine.recoverActiveMatches();
+
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   const addr = server.address();
   const port = typeof addr === 'object' && addr ? addr.port : config.port;
@@ -176,8 +203,10 @@ export async function startServer(
     (closing ??= (async () => {
       logger.info('shutting down');
       await leaderLock.stop();
+      matchEngine.destroy();
       pollerService.stop();
       await catalogSyncQueue.close();
+      await socketServer.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       cfClient.destroy();
       await Promise.allSettled([prisma.$disconnect(), redis.quit()]);
@@ -199,6 +228,8 @@ export async function startServer(
     catalogSyncQueue,
     pollerService,
     leaderLock,
+    matchEngine,
+    socketServer,
     port,
     close,
   };
