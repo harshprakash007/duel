@@ -5,6 +5,7 @@ import type { Logger } from '../../lib/logger';
 import type { PollerService } from '../poller/poller.service';
 import type { PickerService } from '../problems/picker.service';
 import type { PollerVerdictEvent } from '../poller/poller.types';
+import type { RatingsService, FinalizedMatchRatings } from '../ratings/ratings.service';
 import {
   calculateScore,
   getQuestionCapMs,
@@ -60,6 +61,7 @@ export class MatchEngine {
     private readonly picker: PickerService,
     private readonly config: Config,
     private readonly logger: Logger,
+    private readonly ratingsService?: RatingsService,
   ) {}
 
   public setEmitter(emitter: MatchEngineEmitter): void {
@@ -714,21 +716,38 @@ export class MatchEngine {
     match.winnerUserId = winnerUserId;
     match.endReason = endReason;
 
+    const finalScores: Record<string, number> = {};
+    for (const p of playersList) {
+      finalScores[p.userId] = p.score;
+    }
+
+    let finalizedRatings: FinalizedMatchRatings | null = null;
+
     // Update DB in single transaction
     await this.db.$transaction(async (tx) => {
-      for (const p of playersList) {
-        await tx.matchPlayer.update({
-          where: {
-            matchId_userId: {
-              matchId,
-              userId: p.userId,
+      if (match.mode === 'RANKED' && !isAborted && this.ratingsService) {
+        finalizedRatings = await this.ratingsService.finalizeMatchRatingsInTx(
+          matchId,
+          match.sheetId,
+          playerResults,
+          finalScores,
+          tx,
+        );
+      } else {
+        for (const p of playersList) {
+          await tx.matchPlayer.update({
+            where: {
+              matchId_userId: {
+                matchId,
+                userId: p.userId,
+              },
             },
-          },
-          data: {
-            totalScore: p.score,
-            result: playerResults[p.userId] as MatchResult | null,
-          },
-        });
+            data: {
+              totalScore: p.score,
+              result: playerResults[p.userId] as MatchResult | null,
+            },
+          });
+        }
       }
 
       await tx.match.update({
@@ -743,6 +762,21 @@ export class MatchEngine {
       });
     });
 
+    if (finalizedRatings && this.ratingsService) {
+      await this.ratingsService.applyPostFinalizeRedis(
+        finalizedRatings,
+        match.sheetId,
+        winnerUserId,
+      );
+
+      // Update in-memory player ratings for snapshot
+      for (const [uid, r] of Object.entries((finalizedRatings as FinalizedMatchRatings).ratings)) {
+        if (match.players[uid]) {
+          match.players[uid].rating = r.after;
+        }
+      }
+    }
+
     // Clear user active match pointers in Redis
     for (const p of playersList) {
       await this.redis.del(`match:user:${p.userId}`);
@@ -754,15 +788,11 @@ export class MatchEngine {
 
     await this.saveSnapshot(match);
 
-    const finalScores: Record<string, number> = {};
-    for (const p of playersList) {
-      finalScores[p.userId] = p.score;
-    }
-
     this.emitter?.emitToMatch(matchId, 'match:end', {
       winnerUserId,
       scores: finalScores,
       endReason,
+      ratings: finalizedRatings ? (finalizedRatings as FinalizedMatchRatings).ratings : undefined,
       serverNow: Date.now(),
     });
     this.emitter?.emitToMatch(matchId, 'match:state', toMatchStateSnapshot(match));

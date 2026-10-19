@@ -176,3 +176,26 @@ Newest entries go at the bottom of each milestone section.
   - The connected player is immediately restored to the queue with their original enqueue timestamp, preserving queue priority and window expansion.
 - **Active Match Reconnection Endpoint:**
   - `GET /api/me/active-match` (and `/api/matches/active-match`) returns current match state snapshot for active matches, or `{ match: null }` when idle.
+
+## M7 — Ratings, Leaderboard, Profiles & Match Recap
+
+- **Authoritative Pure Elo Engine (`packages/shared/src/elo.ts`):**
+  - Logistic expectation: $E_A = 1 / (1 + 10^{(R_B - R_A)/400})$, $E_B = 1 - E_A$.
+  - Dynamic $K$-factor scaling: $K = 40$ for provisional players ($< 10$ ranked matches), $K = 24$ for established players ($\ge 10$ matches).
+  - Anti-Farming Protection (§13): If a pair plays $\ge 3$ ranked matches within the last 24 hours (`repeatPairThreshold = 3`, `repeatPairWindowMs = 24h`), $K$ is halved ($K \times 0.5$).
+  - Hard Rating Floor: Ratings are strictly clamped to a minimum of 100 (`floor = 100`).
+  - Unrated Matches: Private custom matches (`mode === 'PRIVATE'`) and aborted matches (`status === 'ABORTED'`) never alter ratings or insert `RatingHistory`.
+- **Deadlock-Free Atomic Finalization (`RatingsService`):**
+  - Ratings are finalized in the completion transaction.
+  - To prevent circular-wait deadlocks between concurrent matches, both players' `PlayerRating` records are acquired in alphabetical `userId` order (`ORDER BY "userId" ASC FOR UPDATE`).
+  - Records are updated atomically alongside `MatchPlayer.ratingAfter`, `MatchPlayer.totalScore`, and `RatingHistory` inserts.
+- **Authoritative Redis Leaderboards (`LeaderboardService`):**
+  - Global leaderboard: `lb:global` (sorted set by rating). Only players who have played at least 5 ranked matches (`minRankedMatches = 5`) qualify.
+  - Level sheet leaderboards: `lb:sheet:{sheetId}` (sorted set by wins on that sheet). Incremented via `ZINCRBY` upon match completion.
+  - Rebuild Job: `rebuildLeaderboards()` queries authoritative data from Postgres and syncs Redis sorted sets on server start and on demand.
+  - Paginated reads via `ZREVRANGE` with batch player hydration from Postgres, and instant rank calculation via `ZREVRANK`.
+- **Profiles, History & Match Recap APIs:**
+  - `GET /api/leaderboard`: paginated global/sheet leaderboards with `myRank` for authenticated users.
+  - `GET /api/users/:handle`: public profile with win rate, global rank, and last 20 rating points for progress sparkline.
+  - `GET /api/users/:handle/matches`: paginated user match history with opponent details, score, outcomes, and deltas.
+  - `GET /api/matches/:id`: participant-restricted while active (`LOBBY`, `COUNTDOWN`, `ACTIVE`), public once finished/aborted with complete recap.

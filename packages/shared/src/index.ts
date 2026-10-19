@@ -5,3 +5,6 @@ export * from './schemas/sheets';
 export * from './scoring';
 export * from './schemas/socket.types';
 export * from './matchmaking';
+export * from './elo';
+export * from './schemas/leaderboard';
+export * from './schemas/users';

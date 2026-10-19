@@ -25,6 +25,11 @@ import { MatchEngine } from './modules/match/match-engine';
 import { createMatchesRouter } from './modules/match/matches.router';
 import { MatchmakingService } from './modules/matchmaking/matchmaking.service';
 import { createSocketServer, type SocketServerInstance } from './modules/realtime/socket';
+import { RatingsService } from './modules/ratings/ratings.service';
+import { LeaderboardService } from './modules/leaderboard/leaderboard.service';
+import { createLeaderboardRouter } from './modules/leaderboard/leaderboard.router';
+import { UsersService } from './modules/users/users.service';
+import { createUsersRouter } from './modules/users/users.router';
 
 export interface RunningServer {
   server: Server;
@@ -45,6 +50,9 @@ export interface RunningServer {
   matchEngine: MatchEngine;
   matchmakingService: MatchmakingService;
   socketServer: SocketServerInstance;
+  ratingsService: RatingsService;
+  leaderboardService: LeaderboardService;
+  usersService: UsersService;
   port: number;
   close: () => Promise<void>;
 }
@@ -99,7 +107,16 @@ export async function startServer(
   const pickerService = new PickerService(prisma, config);
   const catalogSyncQueue = new CatalogSyncQueue(redis, config, logger, catalogSyncService);
   const pollerService = new PollerService(cfClient, config, logger);
-  const matchEngine = new MatchEngine(prisma, redis, pollerService, pickerService, config, logger);
+  const ratingsService = new RatingsService(prisma, redis, config, logger);
+  const matchEngine = new MatchEngine(
+    prisma,
+    redis,
+    pollerService,
+    pickerService,
+    config,
+    logger,
+    ratingsService,
+  );
   const matchmakingService = new MatchmakingService(prisma, redis, matchEngine, config, logger, {
     onSolvedSync: async (userId, handle) => {
       await solvedSetService.syncUserSolved(userId, handle);
@@ -165,7 +182,11 @@ export async function startServer(
   const handlesRouter = createHandlesRouter(handlesService);
   const sheetsRouter = createSheetsRouter(sheetsService);
   const adminRouter = createAdminRouter(sheetsService, catalogSyncService);
-  const matchesRouter = createMatchesRouter(matchEngine);
+  const leaderboardService = new LeaderboardService(prisma, redis, config);
+  const leaderboardRouter = createLeaderboardRouter(leaderboardService);
+  const usersService = new UsersService(prisma, redis, config);
+  const usersRouter = createUsersRouter(usersService);
+  const matchesRouter = createMatchesRouter(matchEngine, prisma);
 
   const app = createApp({
     config,
@@ -187,6 +208,8 @@ export async function startServer(
       ['/handles', handlesRouter],
       ['/sheets', sheetsRouter],
       ['/admin', adminRouter],
+      ['/leaderboard', leaderboardRouter],
+      ['/users', usersRouter],
       ['/matches', matchesRouter],
       ['/me', matchesRouter],
     ],
@@ -205,6 +228,7 @@ export async function startServer(
   });
 
   await matchEngine.recoverActiveMatches();
+  await ratingsService.rebuildLeaderboards();
 
   await new Promise<void>((resolve) => server.listen(config.port, resolve));
   const addr = server.address();
@@ -245,6 +269,9 @@ export async function startServer(
     matchEngine,
     matchmakingService,
     socketServer,
+    ratingsService,
+    leaderboardService,
+    usersService,
     port,
     close,
   };

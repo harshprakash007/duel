@@ -80,6 +80,7 @@ export interface ServerToClientEvents {
     winnerUserId?: string;
     scores: Record<string, number>;
     endReason: string;
+    ratings?: Record<string, { before: number; after: number; delta: number }>;
     serverNow: number;
   }) => void;
   'system:cf_degraded': (data: { serverNow: number }) => void;
