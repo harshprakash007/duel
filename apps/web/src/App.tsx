@@ -7,6 +7,11 @@ import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
 import { LinkHandlePage } from './pages/LinkHandlePage';
+import { LobbyPage } from './pages/LobbyPage';
+import { MatchPage } from './pages/MatchPage';
+import { MatchRecapPage } from './pages/MatchRecapPage';
+import { LeaderboardPage } from './pages/LeaderboardPage';
+import { UserProfilePage } from './pages/UserProfilePage';
 
 const queryClient = new QueryClient();
 
@@ -54,20 +59,27 @@ export function App() {
                 path="/play"
                 element={
                   <ProtectedRoute>
-                    <div className="mx-auto max-w-4xl px-4 py-16 text-center">
-                      <h2 className="text-3xl font-bold">Duel Arena</h2>
-                      <p className="mt-2 text-slate-400">
-                        Matchmaking and live duels unlocking in upcoming milestones.
-                      </p>
-                    </div>
+                    <LobbyPage />
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/match/:id"
+                element={
+                  <ProtectedRoute>
+                    <MatchPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/matches/:id" element={<MatchRecapPage />} />
+              <Route path="/leaderboard" element={<LeaderboardPage />} />
+              <Route path="/users/:handle" element={<UserProfilePage />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
           <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-600">
-            Duel &middot; Not affiliated with Codeforces.
+            Duel &middot; Real-time 1v1 Competitive Programming Platform &middot; Not affiliated
+            with Codeforces.
           </footer>
         </div>
       </BrowserRouter>

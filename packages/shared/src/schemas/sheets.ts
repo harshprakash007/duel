@@ -17,6 +17,7 @@ export const LevelSheetDtoSchema = z.object({
 });
 
 export type LevelSheetDto = z.infer<typeof LevelSheetDtoSchema>;
+export type SheetDto = LevelSheetDto;
 
 export const CreateSheetInputSchema = z.object({
   slug: z.string().min(2).max(64),

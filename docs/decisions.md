@@ -199,3 +199,30 @@ Newest entries go at the bottom of each milestone section.
   - `GET /api/users/:handle`: public profile with win rate, global rank, and last 20 rating points for progress sparkline.
   - `GET /api/users/:handle/matches`: paginated user match history with opponent details, score, outcomes, and deltas.
   - `GET /api/matches/:id`: participant-restricted while active (`LOBBY`, `COUNTDOWN`, `ACTIVE`), public once finished/aborted with complete recap.
+
+## M8 — Frontend & Full Web App
+
+- **Web Audio Pure-Tone Synthesizer (`lib/sound.ts`):**
+  - Zero static audio asset dependencies. Uses native Web Audio API oscillators and gain envelopes to synthesize distinctive pure-tone chimes for match found, countdown ticks, question start, solve accepted, penalties, victory, and defeat.
+  - Automatically handles suspended audio contexts on initial user gesture and provides safe no-op fallbacks in Node.js test environments.
+- **Sound Preferences (`store/sound.ts`):**
+  - Audio is strictly disabled/muted by default per §20 requirements (`soundEnabled: false`).
+  - Preferences persist via `localStorage` across page reloads.
+- **Clock Drift Immunity:**
+  - Real-time countdowns synchronize using server-provided absolute timestamps (`deadlineAtMs`, `serverNow`) combined with computed client-server clock offset (`clockDriftMs = serverNow - Date.now()`).
+  - Timer computations use `Math.max(0, deadlineAtMs - (Date.now() + clockDriftMs))`, ensuring countdowns remain accurate even if local client time is skewed.
+- **Real-Time Match Arena (`pages/MatchPage.tsx`):**
+  - Dynamic dual scoreboard tracks points, solve status badges, and wrong attempt indicators.
+  - Question break banner displays next question countdown when `status === 'ACTIVE'` and `activeMatch.breakDeadlineMs` is set.
+  - "I Submitted" action button triggers immediate high-priority Codeforces submission check with 5-second client-side cooldown.
+  - Outage banner alerts players when Codeforces circuit breaker trips to `DEGRADED`, indicating countdowns are temporarily paused.
+  - Resignation confirmation modal warns players before forfeiting ranked points.
+- **Match Recap (`pages/MatchRecapPage.tsx`):**
+  - Post-match outcome hero banner (Victory / Defeat / Draw / Aborted), final scores, rating deltas ($\pm\Delta$), and question-by-question breakdown table detailing solve times, wrong attempts, points earned, and direct problem links.
+- **Leaderboards (`pages/LeaderboardPage.tsx`):**
+  - Global rating and sheet-specific win leaderboards with pagination, sheet dropdown selector, and sticky `myRank` bar at the bottom displaying the authenticated user's current standing.
+- **Player Profiles & Rating Sparklines (`pages/UserProfilePage.tsx`):**
+  - Interactive zero-dependency SVG sparkline graphing the user's last 20 rating points with hover tooltips and delta badges.
+  - Paginated match history table with opponent details, score, outcomes, deltas, and direct links to match recap pages.
+- **Global Navigation & Reconnection (`components/Navbar.tsx`):**
+  - Header bar with sound toggle button (🔊/🔇), Codeforces rating pill, quick links to Lobby and Leaderboard, active match reconnection pill, and user authentication menu.
