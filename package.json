@@ -15,6 +15,7 @@
     "format:check": "prettier --check .",
     "test": "pnpm -r test",
     "test:int": "pnpm --filter @duel/api test:int",
+    "db:generate": "pnpm --filter @duel/api db:generate",
     "cf:probe": "pnpm --filter @duel/cf-client probe",
     "poller:try": "tsx apps/api/src/cli/poller-try.cli.ts",
     "infra:up": "docker compose up -d postgres redis",
