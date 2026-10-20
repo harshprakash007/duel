@@ -12,11 +12,11 @@ async function main() {
   console.log('Seeding Level Sheets (L1–L6)...');
   await seedLevelSheets(db);
 
-  // Seed default admin account if not present
+  // Seed default admin account if not present or update password
   const adminEmail = 'admin@duel.local';
   const existingAdmin = await db.user.findUnique({ where: { email: adminEmail } });
+  const passwordHash = await hashPassword('AdminPass123!');
   if (!existingAdmin) {
-    const passwordHash = await hashPassword('AdminDuel2026!');
     await db.user.create({
       data: {
         email: adminEmail,
@@ -26,6 +26,12 @@ async function main() {
       },
     });
     console.log(`Created default admin: ${adminEmail}`);
+  } else {
+    await db.user.update({
+      where: { email: adminEmail },
+      data: { passwordHash, role: 'ADMIN' },
+    });
+    console.log(`Updated default admin credentials: ${adminEmail}`);
   }
 
   await db.$disconnect();

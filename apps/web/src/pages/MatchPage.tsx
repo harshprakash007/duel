@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
-import { Flag } from 'lucide-react';
+import { Flag, ExternalLink, Zap, AlertOctagon, CheckCircle2, XCircle } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { useSocketStore } from '../store/socket';
 import { apiFetch } from '../api/client';
@@ -41,7 +41,6 @@ export function MatchPage() {
         if (res.match && res.match.matchId === routeMatchId) {
           setActiveMatch(res.match);
         } else {
-          // If match is finished or user not in active match, navigate to recap
           navigate(`/matches/${routeMatchId}`, { replace: true });
         }
       } catch {
@@ -104,20 +103,23 @@ export function MatchPage() {
     setIsResigning(true);
     try {
       await resignMatch();
-      setShowResignModal(false);
     } finally {
       setIsResigning(false);
+      setShowResignModal(false);
     }
   };
 
   const handleSubmitReport = async () => {
-    if (!activeMatch) return;
+    if (!activeMatch || reportReason.trim().length < 5) return;
     setIsSubmittingReport(true);
     setReportError(null);
     try {
       await apiFetch(`/api/matches/${activeMatch.matchId}/report`, {
         method: 'POST',
-        body: JSON.stringify({ reason: reportReason.trim() }),
+        body: JSON.stringify({
+          category: 'CHEATING',
+          comment: reportReason.trim(),
+        }),
       });
       setReportSuccess(true);
       setTimeout(() => {
@@ -134,19 +136,19 @@ export function MatchPage() {
 
   if (!activeMatch) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-          <span className="text-sm text-slate-400">Loading duel arena...</span>
+      <div className="flex min-h-[60vh] flex-col items-center justify-center text-sm font-mono text-cyan-400">
+        <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-950/40 border border-cyan-500/40 mb-4">
+          <Zap className="w-6 h-6 animate-pulse" />
         </div>
+        <span>INITIALIZING ARENA TELEMETRY...</span>
       </div>
     );
   }
 
-  const players = Object.values(activeMatch.players);
-  const myPlayer = players.find((p) => p.userId === user?.id) ?? players[0];
-  const oppPlayer = players.find((p) => p.userId !== user?.id) ?? players[1];
-
+  // Derive my player and opponent player
+  const playersList = Object.values(activeMatch.players);
+  const myPlayer = playersList.find((p) => p.userId === user?.id);
+  const oppPlayer = playersList.find((p) => p.userId !== user?.id);
   const problem = activeMatch.currentProblem;
   const isCountdown = activeMatch.status === 'COUNTDOWN';
   const isBreak = Boolean(activeMatch.breakDeadlineMs);
@@ -158,80 +160,87 @@ export function MatchPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className="mx-auto max-w-7xl px-4 py-6">
       {/* Codeforces Outage Warning Banner */}
       {cfDegraded && (
-        <div className="mb-6 rounded-xl border border-amber-500/50 bg-amber-500/10 p-4 text-center">
-          <span className="font-bold text-amber-400">Codeforces API Degradation Detected</span>
-          <p className="text-xs text-slate-400 mt-1">
-            Question timers are frozen. Match will resume automatically when Codeforces recovers.
+        <div className="mb-6 rounded-2xl border border-amber-500/60 bg-amber-950/30 p-4 text-center backdrop-blur-md shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+          <span className="font-mono font-bold text-amber-300 flex items-center justify-center gap-2">
+            <AlertOctagon className="w-4 h-4" />
+            CODEFORCES API DEGRADATION DETECTED
+          </span>
+          <p className="text-xs text-slate-300 mt-1 font-mono">
+            Timers are frozen. Matches will resume automatically when Codeforces recovers.
           </p>
         </div>
       )}
 
-      {/* Top Bar: Match Info & Countdown */}
-      <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/60 p-4 sm:p-6 backdrop-blur flex flex-wrap items-center justify-between gap-4">
+      {/* Top HUD: Match Info & Authoritative Timer */}
+      <div className="mb-6 rounded-2xl border border-cyan-500/30 bg-[#060b17]/90 p-4 sm:p-6 backdrop-blur-xl flex flex-wrap items-center justify-between gap-4 shadow-[0_0_25px_rgba(6,182,212,0.15)]">
         <div>
-          <span className="text-xs uppercase tracking-wider font-bold text-indigo-400">
-            {activeMatch.mode === 'RANKED' ? 'Ranked Match' : 'Private Custom Match'}
+          <span className="text-[11px] uppercase tracking-widest font-mono font-bold text-cyan-400 bg-cyan-950/60 border border-cyan-500/30 px-2.5 py-0.5 rounded-full">
+            {activeMatch.mode === 'RANKED' ? 'RANKED 1v1 DUEL' : 'PRIVATE CUSTOM ARENA'}
           </span>
-          <h2 className="text-xl sm:text-2xl font-bold text-white mt-0.5">
+          <h2 className="text-xl sm:text-2xl font-extrabold text-white mt-1.5 font-mono">
             Question {(activeMatch.currentQuestionIdx ?? 0) + 1} of {activeMatch.questionCount}
           </h2>
         </div>
 
         {/* Big Authoritative Timer */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 sm:gap-6">
           <div className="text-center">
-            <span className="text-xs uppercase tracking-wider text-slate-400 font-semibold block">
-              {isCountdown ? 'Starting In' : isBreak ? 'Break Ending In' : 'Time Remaining'}
+            <span className="text-[10px] uppercase tracking-widest text-slate-400 font-mono block">
+              {isCountdown ? 'STARTING IN' : isBreak ? 'BREAK ENDING' : 'ROUND TIME'}
             </span>
             <div
-              className={`font-mono text-3xl sm:text-4xl font-extrabold ${
+              className={`font-mono text-3xl sm:text-4xl font-black tracking-wider ${
                 remainingSec <= 20
-                  ? 'text-rose-500 animate-pulse'
+                  ? 'text-rose-400 neon-text-rose animate-pulse'
                   : remainingSec <= 60
-                    ? 'text-amber-400'
-                    : 'text-emerald-400'
+                    ? 'text-amber-400 neon-text-amber'
+                    : 'text-cyan-400 neon-text-cyan'
               }`}
             >
               {formatTimer(remainingSec)}
             </div>
           </div>
 
-          <button
-            onClick={() => setShowReportModal(true)}
-            className="rounded-xl border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition-colors flex items-center gap-1.5"
-            title="Report Match"
-          >
-            <Flag className="w-3.5 h-3.5 text-slate-400" />
-            Report
-          </button>
-          <button
-            onClick={() => setShowResignModal(true)}
-            className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3.5 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors"
-          >
-            Resign
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="rounded-xl border border-slate-700 bg-slate-900/80 px-3.5 py-2 text-xs font-mono font-bold text-slate-400 hover:text-white hover:border-slate-500 transition-all flex items-center gap-1.5"
+              title="Report Match"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">REPORT</span>
+            </button>
+            <button
+              onClick={() => setShowResignModal(true)}
+              className="rounded-xl border border-rose-500/40 bg-rose-950/20 px-3.5 py-2 text-xs font-mono font-bold text-rose-300 hover:bg-rose-900/40 hover:border-rose-500/70 hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all uppercase"
+            >
+              Resign
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Main Arena Layout */}
+      {/* Main Arena Layout: Problem on Left, Competitors on Right */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Problem Information */}
+        {/* Left Column: Problem Workspace */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 backdrop-blur">
+          <div className="neon-card rounded-2xl p-6 sm:p-8">
             {problem ? (
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-500/15 pb-4">
                   <div className="flex items-center gap-3">
-                    <span className="rounded-lg bg-indigo-600/20 border border-indigo-500/30 px-2.5 py-1 text-sm font-mono font-bold text-indigo-300">
+                    <span className="rounded-lg bg-cyan-950/80 border border-cyan-500/50 px-3 py-1 text-sm font-mono font-extrabold text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
                       {problem.contestId}
                       {problem.index}
                     </span>
-                    <h3 className="text-xl font-bold text-white">{problem.name}</h3>
+                    <h3 className="text-xl sm:text-2xl font-bold text-white tracking-wide">
+                      {problem.name}
+                    </h3>
                   </div>
-                  <span className="rounded-full bg-slate-800 border border-slate-700 px-3 py-1 text-xs font-bold text-amber-300">
+                  <span className="rounded-full bg-amber-500/10 border border-amber-500/40 px-3 py-1 text-xs font-mono font-bold text-amber-300 shadow-[0_0_10px_rgba(245,158,11,0.2)]">
                     Rating {problem.rating}
                   </span>
                 </div>
@@ -240,91 +249,106 @@ export function MatchPage() {
                   {problem.tags.map((t) => (
                     <span
                       key={t}
-                      className="rounded-md bg-slate-800/80 px-2 py-0.5 text-xs text-slate-400"
+                      className="rounded-md bg-slate-900/80 border border-slate-800 px-2.5 py-0.5 text-xs font-mono text-slate-400"
                     >
-                      {t}
+                      #{t}
                     </span>
                   ))}
                 </div>
 
-                {/* Prominent Solve Action Card */}
-                <div className="mt-8 rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-6 text-center space-y-4">
-                  <p className="text-sm text-slate-300">
-                    Solve this problem on Codeforces. Our poller watches your public submissions in
-                    real time.
+                {/* Problem Action Card */}
+                <div className="mt-8 rounded-2xl border border-cyan-500/30 bg-[#051120]/80 p-6 sm:p-8 text-center space-y-4">
+                  <p className="text-sm text-slate-300 max-w-md mx-auto">
+                    Solve this question on Codeforces in another tab. Our poller tracks your public
+                    verdict in real time.
                   </p>
                   <a
                     href={problem.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 font-bold text-white hover:bg-indigo-500 transition-colors shadow-lg shadow-indigo-600/30"
+                    className="inline-flex items-center gap-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-7 py-3.5 font-mono text-xs font-extrabold uppercase tracking-wider text-white hover:from-cyan-400 hover:to-blue-500 shadow-[0_0_20px_rgba(6,182,212,0.4)] transition-all"
                   >
-                    <span>Open Problem on Codeforces</span>
-                    <span>↗</span>
+                    <span>Open On Codeforces</span>
+                    <ExternalLink className="w-4 h-4" />
                   </a>
                 </div>
 
-                {/* "I Submitted" Hint Action */}
-                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+                {/* Instant Submission Check Hint Action */}
+                <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-4 rounded-xl border border-emerald-500/20 bg-emerald-950/20 p-4 font-mono">
                   <div>
-                    <span className="text-sm font-semibold text-white">Just submitted?</span>
-                    <p className="text-xs text-slate-400">
-                      Click to request an instant high-priority verdict check.
+                    <span className="text-xs font-bold text-emerald-300 uppercase tracking-wide">
+                      Just Submitted Your Solution?
+                    </span>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Request an immediate high-priority verdict scan without waiting for the cycle.
                     </p>
                   </div>
                   <button
                     onClick={handleSubmittedHint}
                     disabled={hintCooldown > 0}
-                    className="w-full sm:w-auto rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                    className="w-full sm:w-auto rounded-xl bg-emerald-600 px-6 py-2.5 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-500 transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] disabled:opacity-50 shrink-0"
                   >
-                    {hintCooldown > 0 ? `Checking... (${hintCooldown}s)` : 'I Submitted!'}
+                    {hintCooldown > 0 ? `Scanning (${hintCooldown}s)` : 'I Submitted!'}
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="flex h-64 items-center justify-center text-slate-500 text-sm">
-                Waiting for question to start...
+              <div className="flex h-64 flex-col items-center justify-center text-slate-500 text-sm font-mono">
+                <span className="animate-pulse">WAITING FOR QUESTION START...</span>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Column: Scoreboard */}
-        <div className="space-y-4">
-          <h3 className="text-sm uppercase tracking-wider font-bold text-slate-400">Scoreboard</h3>
+        {/* Right Column: Scoreboard HUD */}
+        <div className="space-y-4 font-mono">
+          <div className="flex items-center justify-between text-xs text-slate-400 font-bold uppercase tracking-widest px-1">
+            <span>Scoreboard</span>
+            <span className="text-cyan-400">LIVE FEED</span>
+          </div>
 
           {/* Current User Card */}
           {myPlayer && (
             <div
-              className={`rounded-2xl border p-5 transition-all ${
+              className={`rounded-2xl border p-5 transition-all relative overflow-hidden ${
                 myPlayer.solvedCurrent
-                  ? 'border-emerald-500/50 bg-emerald-950/20 shadow-lg shadow-emerald-950/30'
-                  : 'border-slate-800 bg-slate-900/50'
+                  ? 'border-emerald-500/60 bg-emerald-950/30 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
+                  : 'border-cyan-500/30 bg-[#060b17]/90 shadow-[0_0_15px_rgba(6,182,212,0.1)]'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs text-slate-400">You</span>
+                  <span className="text-[10px] text-cyan-400 uppercase tracking-widest font-bold">
+                    YOU
+                  </span>
                   <div className="text-lg font-bold text-white">{myPlayer.handle}</div>
-                  <span className="text-xs text-indigo-400">Rating {myPlayer.rating}</span>
+                  <span className="text-xs text-slate-400">{myPlayer.rating} Elo</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-slate-400 uppercase font-semibold">Score</span>
-                  <div className="text-3xl font-mono font-black text-white">{myPlayer.score}</div>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Score</span>
+                  <div className="text-3xl font-extrabold text-white neon-text-cyan">
+                    {myPlayer.score}
+                  </div>
                 </div>
               </div>
 
               <div className="mt-4 border-t border-slate-800/80 pt-3 flex items-center justify-between text-xs">
                 <span>
                   {myPlayer.solvedCurrent ? (
-                    <span className="font-semibold text-emerald-400">✓ Solved</span>
+                    <span className="font-semibold text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Solved
+                    </span>
                   ) : (
-                    <span className="text-slate-400">Solving...</span>
+                    <span className="text-cyan-300 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                      Solving...
+                    </span>
                   )}
                 </span>
                 {myPlayer.wrongAttemptsCurrent > 0 && (
-                  <span className="text-rose-400 font-semibold">
-                    {myPlayer.wrongAttemptsCurrent} wrong attempts
+                  <span className="text-rose-400 font-semibold flex items-center gap-1">
+                    <XCircle className="w-3.5 h-3.5" />
+                    {myPlayer.wrongAttemptsCurrent} penalty
                   </span>
                 )}
               </div>
@@ -334,35 +358,45 @@ export function MatchPage() {
           {/* Opponent Card */}
           {oppPlayer && (
             <div
-              className={`rounded-2xl border p-5 transition-all ${
+              className={`rounded-2xl border p-5 transition-all relative overflow-hidden ${
                 oppPlayer.solvedCurrent
-                  ? 'border-emerald-500/50 bg-emerald-950/20 shadow-lg shadow-emerald-950/30'
-                  : 'border-slate-800 bg-slate-900/50'
+                  ? 'border-emerald-500/60 bg-emerald-950/30 shadow-[0_0_20px_rgba(16,185,129,0.25)]'
+                  : 'border-violet-500/30 bg-[#060b17]/90 shadow-[0_0_15px_rgba(168,85,247,0.1)]'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <span className="text-xs text-slate-400">Opponent</span>
+                  <span className="text-[10px] text-violet-400 uppercase tracking-widest font-bold">
+                    OPPONENT
+                  </span>
                   <div className="text-lg font-bold text-white">{oppPlayer.handle}</div>
-                  <span className="text-xs text-indigo-400">Rating {oppPlayer.rating}</span>
+                  <span className="text-xs text-slate-400">{oppPlayer.rating} Elo</span>
                 </div>
                 <div className="text-right">
-                  <span className="text-xs text-slate-400 uppercase font-semibold">Score</span>
-                  <div className="text-3xl font-mono font-black text-white">{oppPlayer.score}</div>
+                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Score</span>
+                  <div className="text-3xl font-extrabold text-white neon-text-violet">
+                    {oppPlayer.score}
+                  </div>
                 </div>
               </div>
 
               <div className="mt-4 border-t border-slate-800/80 pt-3 flex items-center justify-between text-xs">
                 <span>
                   {oppPlayer.solvedCurrent ? (
-                    <span className="font-semibold text-emerald-400">✓ Solved</span>
+                    <span className="font-semibold text-emerald-400 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5" /> Solved
+                    </span>
                   ) : (
-                    <span className="text-slate-400">Solving...</span>
+                    <span className="text-violet-300 flex items-center gap-1.5">
+                      <span className="h-2 w-2 rounded-full bg-violet-400 animate-pulse"></span>
+                      Solving...
+                    </span>
                   )}
                 </span>
                 {oppPlayer.wrongAttemptsCurrent > 0 && (
-                  <span className="text-rose-400 font-semibold">
-                    {oppPlayer.wrongAttemptsCurrent} wrong attempts
+                  <span className="text-rose-400 font-semibold flex items-center gap-1">
+                    <XCircle className="w-3.5 h-3.5" />
+                    {oppPlayer.wrongAttemptsCurrent} penalty
                   </span>
                 )}
               </div>
@@ -373,27 +407,28 @@ export function MatchPage() {
 
       {/* Report Modal */}
       {showReportModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-              <Flag className="w-5 h-5 text-indigo-400" />
-              Report Match
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 font-mono">
+          <div className="w-full max-w-md rounded-2xl border border-cyan-500/40 bg-[#060e20] p-6 shadow-[0_0_35px_rgba(6,182,212,0.25)]">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Flag className="w-5 h-5 text-cyan-400" />
+              REPORT SUSPICIOUS ACTIVITY
             </h3>
-            <p className="mt-2 text-sm text-slate-400">
-              Report suspected cheating, outside assistance, or unsportsmanlike behavior.
+            <p className="mt-2 text-xs text-slate-400">
+              Submit a report for administrator review (cheating, outside assistance, or
+              harassment).
             </p>
             <textarea
               value={reportReason}
               onChange={(e) => setReportReason(e.target.value)}
               placeholder="Describe the issue (minimum 5 characters)..."
               rows={4}
-              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-sm text-white focus:border-indigo-500 focus:outline-none"
+              className="mt-4 w-full rounded-xl border border-cyan-500/30 bg-slate-950 p-3 text-xs text-white placeholder-slate-600 focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(6,182,212,0.3)] focus:outline-none"
             />
             {reportError && <p className="mt-2 text-xs text-rose-400">{reportError}</p>}
             {reportSuccess && (
               <p className="mt-2 text-xs text-emerald-400">Report submitted successfully.</p>
             )}
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 flex justify-end gap-3 text-xs">
               <button
                 onClick={() => {
                   setShowReportModal(false);
@@ -402,14 +437,14 @@ export function MatchPage() {
                   setReportSuccess(false);
                 }}
                 disabled={isSubmittingReport}
-                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700"
+                className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 font-semibold text-slate-300 hover:bg-slate-800"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSubmitReport}
                 disabled={isSubmittingReport || reportReason.trim().length < 5 || reportSuccess}
-                className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50"
+                className="rounded-xl bg-cyan-600 px-5 py-2 font-bold text-white hover:bg-cyan-500 shadow-[0_0_15px_rgba(6,182,212,0.3)] disabled:opacity-50"
               >
                 {isSubmittingReport ? 'Submitting...' : 'Submit Report'}
               </button>
@@ -420,24 +455,27 @@ export function MatchPage() {
 
       {/* Resign Confirmation Modal */}
       {showResignModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-xl font-bold text-white">Resign Match?</h3>
-            <p className="mt-2 text-sm text-slate-400">
-              Resigning immediately ends the duel and counts as a loss. Your rating will be
-              calculated accordingly.
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 font-mono">
+          <div className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-[#16060c] p-6 shadow-[0_0_35px_rgba(244,63,94,0.25)]">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <AlertOctagon className="w-5 h-5 text-rose-400" />
+              CONFIRM FORFEIT / RESIGN
+            </h3>
+            <p className="mt-2 text-xs text-slate-300 leading-relaxed">
+              Resigning immediately ends the duel and registers as a defeat. Your Elo will update
+              accordingly.
             </p>
-            <div className="mt-6 flex justify-end gap-3">
+            <div className="mt-6 flex justify-end gap-3 text-xs">
               <button
                 onClick={() => setShowResignModal(false)}
-                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-700"
+                className="rounded-xl border border-slate-700 bg-slate-900 px-4 py-2 font-semibold text-slate-300 hover:bg-slate-800"
               >
-                Continue Playing
+                Stay In Duel
               </button>
               <button
                 onClick={handleResign}
                 disabled={isResigning}
-                className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-50"
+                className="rounded-xl bg-rose-600 px-5 py-2 font-bold text-white hover:bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.3)] disabled:opacity-50"
               >
                 {isResigning ? 'Resigning...' : 'Confirm Resign'}
               </button>
@@ -447,17 +485,17 @@ export function MatchPage() {
       )}
 
       {/* Toast Notification Feed */}
-      <div className="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-sm">
+      <div className="fixed bottom-4 right-4 z-40 flex flex-col gap-2 max-w-sm font-mono">
         {toasts.slice(-4).map((t) => (
           <div
             key={t.id}
             onClick={() => removeToast(t.id)}
-            className={`cursor-pointer rounded-xl border p-3.5 text-xs shadow-lg backdrop-blur transition-all ${
+            className={`cursor-pointer rounded-xl border p-3.5 text-xs shadow-xl backdrop-blur-md transition-all ${
               t.type === 'success'
-                ? 'border-emerald-500/50 bg-emerald-950/80 text-emerald-200'
+                ? 'border-emerald-500/50 bg-emerald-950/90 text-emerald-200 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
                 : t.type === 'penalty'
-                  ? 'border-rose-500/50 bg-rose-950/80 text-rose-200'
-                  : 'border-slate-700 bg-slate-900/90 text-slate-200'
+                  ? 'border-rose-500/50 bg-rose-950/90 text-rose-200 shadow-[0_0_15px_rgba(244,63,94,0.2)]'
+                  : 'border-cyan-500/30 bg-[#060b17]/95 text-slate-200'
             }`}
           >
             {t.message}

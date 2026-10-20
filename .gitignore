@@ -10,3 +10,4 @@ playwright-report/
 test-results/
 .vite/
 *.tsbuildinfo
+backups/

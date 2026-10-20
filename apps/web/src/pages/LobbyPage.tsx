@@ -4,6 +4,17 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../store/auth';
 import { useSocketStore } from '../store/socket';
 import { apiFetch } from '../api/client';
+import {
+  Swords,
+  Radio,
+  Layers,
+  Copy,
+  Check,
+  AlertTriangle,
+  Play,
+  Users,
+  Clock,
+} from 'lucide-react';
 import type { SheetDto, MatchStateSnapshot } from '@duel/shared';
 
 export function LobbyPage() {
@@ -140,79 +151,91 @@ export function LobbyPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className="mx-auto max-w-7xl px-4 py-8">
       {/* Linked Handle Warning Banner */}
       {!user?.handle && (
-        <div className="mb-8 rounded-xl border border-amber-500/40 bg-amber-500/10 p-5 backdrop-blur">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="mb-8 rounded-2xl border border-amber-500/40 bg-amber-950/20 p-5 backdrop-blur-md shadow-[0_0_20px_rgba(245,158,11,0.15)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/40">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
             <div>
-              <h3 className="font-semibold text-amber-300">Codeforces Handle Required</h3>
+              <h3 className="font-bold text-amber-300 tracking-wide font-mono">
+                Codeforces Verification Required
+              </h3>
               <p className="text-sm text-slate-400 mt-0.5">
-                Link and verify your Codeforces account to enter ranked matchmaking and private
+                Link and verify your Codeforces handle to enter ranked matchmaking and private duel
                 rooms.
               </p>
             </div>
-            <Link
-              to="/link-handle"
-              className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-amber-400 transition-colors"
-            >
-              Link Handle Now
-            </Link>
           </div>
+          <Link
+            to="/link-handle"
+            className="rounded-xl bg-amber-500 px-5 py-2.5 text-xs font-bold text-slate-950 hover:bg-amber-400 transition-all font-mono uppercase tracking-wider shadow-[0_0_15px_rgba(245,158,11,0.3)] shrink-0"
+          >
+            Verify Handle
+          </Link>
         </div>
       )}
 
       {/* Action Error Banner */}
       {actionError && (
-        <div className="mb-6 rounded-lg border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-300">
-          {actionError}
+        <div className="mb-6 rounded-xl border border-rose-500/40 bg-rose-950/30 p-4 text-sm text-rose-300 font-mono shadow-[0_0_15px_rgba(244,63,94,0.2)]">
+          [ERROR] {actionError}
         </div>
       )}
 
-      {/* Queue Modal / Active Overlay */}
+      {/* Queue Active Cyber Radar Overlay */}
       {queueStatus?.inQueue && (
-        <div className="mb-8 rounded-2xl border border-indigo-500/40 bg-indigo-950/40 p-6 sm:p-8 backdrop-blur shadow-2xl shadow-indigo-950/60">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+        <div className="mb-8 rounded-2xl border border-cyan-500/40 bg-[#060e20]/90 p-6 sm:p-8 backdrop-blur-xl shadow-[0_0_35px_rgba(6,182,212,0.25)] relative overflow-hidden">
+          {/* Subtle Radar Background Sweep */}
+          <div className="absolute -right-20 -bottom-20 w-80 h-80 rounded-full border border-cyan-500/20 pointer-events-none opacity-40">
+            <div className="w-full h-full rounded-full border border-cyan-500/10 radar-sweep bg-gradient-to-tr from-cyan-500/10 to-transparent" />
+          </div>
+
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-5">
-              <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-600/30 border border-indigo-500/50">
-                <span className="text-2xl animate-pulse">⚔</span>
-                <div className="absolute inset-0 rounded-2xl border-2 border-indigo-500 animate-ping opacity-25" />
+              <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-cyan-950/80 border border-cyan-500/60 shadow-[0_0_20px_rgba(6,182,212,0.4)]">
+                <Radio className="w-8 h-8 text-cyan-400 animate-pulse" />
+                <div className="absolute inset-0 rounded-2xl border border-cyan-400 animate-ping opacity-30" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-xl font-bold text-white">Searching for Opponent...</h3>
-                  <span className="rounded-full bg-indigo-500/20 border border-indigo-500/40 px-2.5 py-0.5 text-xs font-semibold text-indigo-300">
-                    Ranked
+                <div className="flex items-center gap-2.5">
+                  <h3 className="text-xl font-extrabold text-white font-mono tracking-wide">
+                    SCANNING FOR OPPONENT
+                  </h3>
+                  <span className="rounded-full bg-cyan-500/20 border border-cyan-500/40 px-2.5 py-0.5 text-xs font-mono font-bold text-cyan-300">
+                    RANKED 1v1
                   </span>
                 </div>
-                <p className="text-sm text-slate-400 mt-1">
-                  Sheet: <span className="font-medium text-slate-200">{queueStatus.sheetSlug}</span>
+                <p className="text-sm text-slate-400 mt-1 font-mono">
+                  SHEET: <span className="text-cyan-300 font-bold">{queueStatus.sheetSlug}</span>
                 </p>
               </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-6">
               <div className="text-center">
-                <span className="text-xs uppercase tracking-wider text-slate-400 font-medium">
-                  Elapsed Time
+                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-mono">
+                  Queue Time
                 </span>
-                <div className="text-2xl font-mono font-bold text-white">
+                <div className="text-2xl font-mono font-extrabold text-white">
                   {formatTimer(localWaitSec || Math.floor(queueStatus.waitedMs / 1000))}
                 </div>
               </div>
 
               <div className="text-center border-l border-slate-800 pl-6">
-                <span className="text-xs uppercase tracking-wider text-slate-400 font-medium">
-                  Rating Window
+                <span className="text-[11px] uppercase tracking-wider text-slate-400 font-mono">
+                  Rating Band
                 </span>
-                <div className="text-2xl font-mono font-bold text-indigo-400">
+                <div className="text-2xl font-mono font-extrabold text-cyan-400 neon-text-cyan">
                   &plusmn;{queueStatus.window}
                 </div>
               </div>
 
               <button
                 onClick={handleCancelQueue}
-                className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-5 py-2.5 text-sm font-semibold text-rose-300 hover:bg-rose-500/20 transition-colors"
+                className="rounded-xl border border-rose-500/40 bg-rose-950/30 px-5 py-2.5 text-xs font-mono font-bold text-rose-300 hover:bg-rose-900/40 hover:border-rose-500/70 hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all uppercase tracking-wider"
               >
                 Cancel Queue
               </button>
@@ -223,56 +246,64 @@ export function LobbyPage() {
 
       {/* Custom Room Lobby Card */}
       {roomCode && !queueStatus?.inQueue && (
-        <div className="mb-8 rounded-2xl border border-emerald-500/40 bg-emerald-950/30 p-6 sm:p-8 backdrop-blur">
+        <div className="mb-8 rounded-2xl border border-emerald-500/40 bg-[#051a14]/90 p-6 sm:p-8 backdrop-blur-xl shadow-[0_0_30px_rgba(16,185,129,0.2)]">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div>
-              <span className="text-xs uppercase tracking-wider text-emerald-400 font-bold">
-                Private Room Lobby
+              <span className="text-xs uppercase tracking-widest text-emerald-400 font-mono font-bold">
+                PRIVATE ARENA // CODE GENERATED
               </span>
-              <h3 className="text-2xl font-black text-white mt-1">
-                Room Code:{' '}
-                <span className="font-mono tracking-widest text-emerald-300">{roomCode}</span>
+              <h3 className="text-3xl font-black text-white mt-1 font-mono tracking-widest flex items-center gap-3">
+                <span className="text-emerald-300 neon-text-emerald">{roomCode}</span>
               </h3>
-              <p className="text-sm text-slate-400 mt-1">
-                Share this 6-character code with your opponent. Match starts when both players click
-                Ready.
+              <p className="text-sm text-slate-400 mt-1 font-mono">
+                Share this 6-character room code with your opponent. Match starts when both players
+                signal Ready.
               </p>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 font-mono">
               <button
                 onClick={handleCopyCode}
-                className="rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-700 transition-colors"
+                className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-slate-900/80 px-4 py-2.5 text-xs font-bold text-emerald-300 hover:bg-emerald-950/40 hover:border-emerald-500/60 transition-all uppercase"
               >
-                {copiedCode ? '✓ Copied!' : 'Copy Code'}
+                {copiedCode ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                <span>{copiedCode ? 'Copied' : 'Copy Code'}</span>
               </button>
               <button
                 onClick={setReady}
-                className="rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-600/30"
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-2.5 text-xs font-bold text-white hover:from-emerald-400 hover:to-teal-500 transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] uppercase tracking-wider"
               >
-                Ready to Duel
+                <Play className="w-4 h-4 fill-white" />
+                <span>Ready to Duel</span>
               </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Main Grid: Sheets on Left, Arena Controls on Right */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left Column: Level Sheets Selector */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between border-b border-cyan-500/15 pb-4">
             <div>
-              <h2 className="text-2xl font-bold text-white tracking-tight">Level Sheets</h2>
-              <p className="text-sm text-slate-400">
-                Choose a difficulty band based on Codeforces ratings
+              <h2 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2.5">
+                <Layers className="w-6 h-6 text-cyan-400" />
+                <span>Level Sheets</span>
+              </h2>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                Target Codeforces rating tiers from Rookie to Master
               </p>
             </div>
           </div>
 
           {sheetsLoading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="h-32 rounded-xl bg-slate-900/60 animate-pulse" />
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div
+                  key={i}
+                  className="h-36 rounded-2xl bg-slate-900/40 border border-slate-800/80 animate-pulse"
+                />
               ))}
             </div>
           ) : (
@@ -283,24 +314,38 @@ export function LobbyPage() {
                   <button
                     key={s.id}
                     onClick={() => setSelectedSheetSlug(s.slug)}
-                    className={`text-left p-5 rounded-2xl border transition-all ${
+                    className={`text-left p-5 rounded-2xl border transition-all relative overflow-hidden group ${
                       isSelected
-                        ? 'border-indigo-500 bg-indigo-950/30 shadow-lg shadow-indigo-950/40'
-                        : 'border-slate-800/80 bg-slate-900/40 hover:border-slate-700 hover:bg-slate-900/80'
+                        ? 'border-cyan-400 bg-cyan-950/20 shadow-[0_0_25px_rgba(6,182,212,0.25)]'
+                        : 'border-slate-800/80 bg-slate-900/40 hover:border-cyan-500/40 hover:bg-slate-900/70'
                     }`}
                   >
+                    {isSelected && (
+                      <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-500/10 rounded-bl-full pointer-events-none" />
+                    )}
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-white text-lg">{s.name}</span>
-                      <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-semibold text-indigo-300">
+                      <span className="font-extrabold text-white text-base tracking-wide font-mono">
+                        {s.name}
+                      </span>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-mono font-bold border ${
+                          isSelected
+                            ? 'bg-cyan-500/20 border-cyan-400/60 text-cyan-300'
+                            : 'bg-slate-800/80 border-slate-700 text-slate-300'
+                        }`}
+                      >
                         {s.minRating} &ndash; {s.maxRating}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-2 line-clamp-2">
+                    <p className="text-xs text-slate-400 mt-2.5 line-clamp-2 leading-relaxed">
                       {s.description || 'Curated problem set from Codeforces.'}
                     </p>
-                    <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
-                      <span>{s.questionCount} Questions</span>
-                      <span>{s.problemCount ?? 0} active problems</span>
+                    <div className="mt-4 pt-3 border-t border-slate-800/60 flex items-center justify-between text-[11px] font-mono text-slate-500">
+                      <span className="flex items-center gap-1.5">
+                        <Clock className="w-3.5 h-3.5 text-slate-400" />
+                        {s.questionCount} Questions
+                      </span>
+                      <span className="text-slate-400">{s.problemCount ?? 0} problems</span>
                     </div>
                   </button>
                 );
@@ -312,79 +357,85 @@ export function LobbyPage() {
         {/* Right Column: Duel Controls */}
         <div className="space-y-6">
           {/* Ranked Matchmaking Card */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 backdrop-blur">
-            <h3 className="text-lg font-bold text-white">Ranked 1v1 Queue</h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Match against a player with similar platform rating. Scores update live Elo.
+          <div className="neon-card rounded-2xl p-6">
+            <div className="flex items-center gap-2 mb-2">
+              <Swords className="w-5 h-5 text-cyan-400" />
+              <h3 className="text-lg font-bold text-white tracking-wide">Ranked 1v1 Queue</h3>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Match against a player with similar Elo on the selected sheet. Points count toward
+              global standings.
             </p>
 
             <button
               onClick={handleStartQueue}
               disabled={!user?.handle || queueStatus?.inQueue || !isConnected}
-              className={`mt-6 w-full rounded-xl py-3.5 text-sm font-bold text-white transition-all shadow-lg ${
+              className={`mt-6 w-full rounded-xl py-3.5 text-xs font-mono font-bold uppercase tracking-wider transition-all shadow-lg ${
                 !user?.handle || queueStatus?.inQueue || !isConnected
-                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed shadow-none'
-                  : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'
+                  ? 'bg-slate-800/60 text-slate-500 border border-slate-700 cursor-not-allowed shadow-none'
+                  : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-[0_0_20px_rgba(6,182,212,0.35)]'
               }`}
             >
-              {queueStatus?.inQueue ? 'Already in Queue' : 'Enter Ranked Queue'}
+              {queueStatus?.inQueue ? 'Already In Queue' : 'Enter Ranked Queue'}
             </button>
           </div>
 
           {/* Custom Private Rooms Card */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6 backdrop-blur space-y-6">
+          <div className="neon-card-violet rounded-2xl p-6 space-y-6">
             <div>
-              <h3 className="text-lg font-bold text-white">Custom Private Room</h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Play an unrated friendly match with a friend using a 6-character room code.
+              <div className="flex items-center gap-2 mb-2">
+                <Users className="w-5 h-5 text-violet-400" />
+                <h3 className="text-lg font-bold text-white tracking-wide">Private Arena</h3>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Play an unranked friendly match with a peer using a 6-character room code.
               </p>
             </div>
 
             {/* Create Room Form */}
-            <div className="border-t border-slate-800 pt-4 space-y-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Create Room
-              </span>
-              <div>
-                <label className="text-xs text-slate-400">
-                  Question Count: {customQuestionCount}
-                </label>
-                <input
-                  type="range"
-                  min="3"
-                  max="5"
-                  value={customQuestionCount}
-                  onChange={(e) => setCustomQuestionCount(Number(e.target.value))}
-                  className="w-full accent-indigo-500"
-                />
+            <div className="border-t border-violet-500/20 pt-4 space-y-3">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-slate-400 uppercase">Question Count:</span>
+                <span className="text-violet-300 font-bold">{customQuestionCount} Questions</span>
               </div>
+              <input
+                type="range"
+                min="3"
+                max="5"
+                value={customQuestionCount}
+                onChange={(e) => setCustomQuestionCount(Number(e.target.value))}
+                className="w-full accent-violet-500 cursor-pointer"
+              />
               <button
                 onClick={handleCreateRoom}
                 disabled={!user?.handle || isCreatingRoom || queueStatus?.inQueue}
-                className="w-full rounded-xl border border-slate-700 bg-slate-800/80 py-2.5 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors disabled:opacity-50"
+                className="w-full rounded-xl border border-violet-500/30 bg-violet-950/30 py-2.5 text-xs font-mono font-bold text-violet-200 hover:bg-violet-900/40 hover:border-violet-500/60 transition-all uppercase tracking-wider disabled:opacity-50"
               >
-                {isCreatingRoom ? 'Creating...' : 'Create Private Room'}
+                {isCreatingRoom ? 'Creating...' : 'Create Room Code'}
               </button>
             </div>
 
             {/* Join Room Form */}
-            <form onSubmit={handleJoinRoom} className="border-t border-slate-800 pt-4 space-y-3">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                Join with Code
+            <form
+              onSubmit={handleJoinRoom}
+              className="border-t border-violet-500/20 pt-4 space-y-3"
+            >
+              <span className="text-xs font-mono font-semibold uppercase tracking-wider text-slate-400 block">
+                Join with Room Code
               </span>
-              <div className="flex gap-2">
+              <div className="flex gap-2 font-mono">
                 <input
                   type="text"
                   maxLength={6}
                   placeholder="CODE6"
                   value={customRoomCodeInput}
                   onChange={(e) => setCustomRoomCodeInput(e.target.value.toUpperCase())}
-                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-center font-mono font-bold uppercase text-white placeholder-slate-600 focus:border-indigo-500 focus:outline-none"
+                  className="flex-1 rounded-xl border border-violet-500/30 bg-slate-950/90 px-3 py-2.5 text-center font-bold uppercase text-violet-200 placeholder-slate-600 focus:border-violet-400 focus:shadow-[0_0_15px_rgba(168,85,247,0.3)] focus:outline-none text-sm tracking-widest"
                 />
                 <button
                   type="submit"
                   disabled={!user?.handle || customRoomCodeInput.length < 6}
-                  className="rounded-xl bg-slate-800 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 transition-colors disabled:opacity-50"
+                  className="rounded-xl bg-violet-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-violet-500 transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] disabled:opacity-50 uppercase tracking-wider"
                 >
                   Join
                 </button>

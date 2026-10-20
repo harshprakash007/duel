@@ -6,3 +6,4 @@ apps/api/src/generated
 apps/api/prisma/migrations
 playwright-report
 test-results
+backups

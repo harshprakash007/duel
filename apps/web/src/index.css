@@ -1,1 +1,141 @@
 @import 'tailwindcss';
+
+@layer base {
+  :root {
+    --neon-cyan: #00f0ff;
+    --neon-violet: #a855f7;
+    --neon-pink: #ec4899;
+    --neon-emerald: #10b981;
+    --neon-amber: #f59e0b;
+    --neon-rose: #f43f5e;
+  }
+
+  body {
+    background-color: #030712;
+    color: #f1f5f9;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    overflow-x: hidden;
+  }
+
+  /* Custom Neon Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #030712;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e293b;
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #06b6d4;
+  }
+}
+
+/* Cybernetic Neon Background Pattern */
+.cyber-bg {
+  background-color: #030712;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(6, 182, 212, 0.12), transparent 70%),
+    radial-gradient(ellipse 60% 40% at 90% 100%, rgba(168, 85, 247, 0.08), transparent 60%),
+    radial-gradient(ellipse 50% 30% at 10% 80%, rgba(16, 185, 129, 0.05), transparent 50%),
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    100% 100%,
+    100% 100%,
+    48px 48px,
+    48px 48px;
+}
+
+/* Neon Glow Classes */
+.neon-glow-cyan {
+  box-shadow:
+    0 0 20px -3px rgba(6, 182, 212, 0.35),
+    0 0 10px -2px rgba(6, 182, 212, 0.2);
+}
+
+.neon-glow-violet {
+  box-shadow:
+    0 0 20px -3px rgba(168, 85, 247, 0.35),
+    0 0 10px -2px rgba(168, 85, 247, 0.2);
+}
+
+.neon-glow-emerald {
+  box-shadow:
+    0 0 20px -3px rgba(16, 185, 129, 0.35),
+    0 0 10px -2px rgba(16, 185, 129, 0.2);
+}
+
+.neon-glow-rose {
+  box-shadow:
+    0 0 20px -3px rgba(244, 63, 94, 0.35),
+    0 0 10px -2px rgba(244, 63, 94, 0.2);
+}
+
+.neon-glow-amber {
+  box-shadow:
+    0 0 20px -3px rgba(245, 158, 11, 0.35),
+    0 0 10px -2px rgba(245, 158, 11, 0.2);
+}
+
+/* Neon Text Glow */
+.neon-text-cyan {
+  text-shadow:
+    0 0 12px rgba(6, 182, 212, 0.6),
+    0 0 25px rgba(6, 182, 212, 0.3);
+}
+
+.neon-text-violet {
+  text-shadow:
+    0 0 12px rgba(168, 85, 247, 0.6),
+    0 0 25px rgba(168, 85, 247, 0.3);
+}
+
+.neon-text-emerald {
+  text-shadow:
+    0 0 12px rgba(16, 185, 129, 0.6),
+    0 0 25px rgba(16, 185, 129, 0.3);
+}
+
+/* Neon Cyber Card */
+.neon-card {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.75) 0%, rgba(3, 7, 18, 0.9) 100%);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  backdrop-filter: blur(16px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.neon-card:hover {
+  border-color: rgba(6, 182, 212, 0.5);
+  box-shadow: 0 0 25px -5px rgba(6, 182, 212, 0.2);
+}
+
+.neon-card-violet {
+  background: linear-gradient(135deg, rgba(26, 16, 45, 0.75) 0%, rgba(3, 7, 18, 0.9) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  backdrop-filter: blur(16px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.neon-card-violet:hover {
+  border-color: rgba(168, 85, 247, 0.5);
+  box-shadow: 0 0 25px -5px rgba(168, 85, 247, 0.2);
+}
+
+/* Pulsing radar scan effect */
+@keyframes radar-scan {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+.radar-sweep {
+  animation: radar-scan 4s linear infinite;
+}

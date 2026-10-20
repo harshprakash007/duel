@@ -1,7 +1,17 @@
+import { existsSync } from 'node:fs';
 import { defineConfig } from 'prisma/config';
-import { loadDotEnv } from './src/lib/dotenv';
 
-loadDotEnv();
+if (typeof process.loadEnvFile === 'function') {
+  for (const f of ['.env', '../../.env', '../.env']) {
+    if (existsSync(f)) {
+      try {
+        process.loadEnvFile(f);
+      } catch {
+        /* ignore invalid env file */
+      }
+    }
+  }
+}
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',

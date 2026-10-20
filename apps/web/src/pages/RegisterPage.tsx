@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { apiFetch, ApiError } from '../api/client';
 import { useAuthStore } from '../store/auth';
+import { Swords, Lock, Mail, User, ArrowRight } from 'lucide-react';
 import type { UserDto } from '@duel/shared';
 
 export function RegisterPage() {
@@ -44,72 +45,95 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)] items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-xl">
-        <h2 className="text-2xl font-bold tracking-tight text-white">Create an account</h2>
-        <p className="mt-1 text-sm text-slate-400">
-          Join Duel to start competitive programming duels.
-        </p>
+    <div className="flex min-h-[calc(100vh-8rem)] items-center justify-center px-4 py-12 font-mono">
+      <div className="w-full max-w-md rounded-3xl border border-cyan-500/30 bg-[#060b17]/90 p-8 shadow-[0_0_35px_rgba(6,182,212,0.2)] backdrop-blur-xl">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-950/60 border border-cyan-500/40 text-cyan-400">
+            <Swords className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-xl font-black text-white tracking-wider">
+              NEW CONTESTANT ENLISTMENT
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">Create your Duel profile.</p>
+          </div>
+        </div>
 
         {error && (
-          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
-            {error}
+          <div className="mb-6 rounded-xl border border-rose-500/40 bg-rose-950/40 p-3.5 text-xs text-rose-300">
+            [ERROR] {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-medium text-slate-300">Display Name</label>
-            <input
-              type="text"
-              required
-              minLength={2}
-              maxLength={32}
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              placeholder="Your username"
-            />
+            <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+              Contestant Handle / Name
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                required
+                minLength={2}
+                maxLength={32}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full rounded-xl border border-cyan-500/30 bg-slate-950 px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(6,182,212,0.3)] focus:outline-none"
+                placeholder="CyberCoder"
+              />
+              <User className="absolute right-3.5 top-3 w-4 h-4 text-slate-600 pointer-events-none" />
+            </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300">Email Address</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              placeholder="you@example.com"
-            />
+            <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+              Email Address
+            </label>
+            <div className="relative">
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full rounded-xl border border-cyan-500/30 bg-slate-950 px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(6,182,212,0.3)] focus:outline-none"
+                placeholder="you@example.com"
+              />
+              <Mail className="absolute right-3.5 top-3 w-4 h-4 text-slate-600 pointer-events-none" />
+            </div>
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300">Password</label>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-lg border border-slate-700 bg-slate-800/80 px-3.5 py-2 text-sm text-white placeholder-slate-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-              placeholder="At least 8 characters"
-            />
+            <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+              Security Key (Password)
+            </label>
+            <div className="relative">
+              <input
+                type="password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full rounded-xl border border-cyan-500/30 bg-slate-950 px-4 py-2.5 text-xs text-white placeholder-slate-600 focus:border-cyan-400 focus:shadow-[0_0_15px_rgba(6,182,212,0.3)] focus:outline-none"
+                placeholder="8+ characters"
+              />
+              <Lock className="absolute right-3.5 top-3 w-4 h-4 text-slate-600 pointer-events-none" />
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-indigo-600/30 hover:bg-indigo-500 disabled:opacity-50 transition-colors"
+            className="w-full rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-xs font-bold text-white shadow-[0_0_20px_rgba(6,182,212,0.35)] hover:from-cyan-400 hover:to-blue-500 hover:shadow-[0_0_25px_rgba(6,182,212,0.5)] disabled:opacity-50 transition-all uppercase tracking-wider mt-2 flex items-center justify-center gap-2"
           >
-            {loading ? 'Creating account...' : 'Create Account'}
+            <span>{loading ? 'Registering...' : 'Create Duel Profile'}</span>
+            <ArrowRight className="w-4 h-4" />
           </button>
         </form>
 
         <p className="mt-6 text-center text-xs text-slate-400">
-          Already have an account?{' '}
-          <Link to="/login" className="font-semibold text-indigo-400 hover:text-indigo-300">
-            Log in
+          Already registered?{' '}
+          <Link to="/login" className="font-bold text-cyan-400 hover:underline">
+            Log In
           </Link>
         </p>
       </div>

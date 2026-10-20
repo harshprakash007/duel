@@ -41,7 +41,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
+        <div className="min-h-screen cyber-bg text-slate-100 flex flex-col font-sans selection:bg-cyan-500/30 selection:text-cyan-200">
           <Navbar />
           <main className="flex-1">
             <Routes>
@@ -75,6 +75,7 @@ export function App() {
               <Route path="/matches/:id" element={<MatchRecapPage />} />
               <Route path="/leaderboard" element={<LeaderboardPage />} />
               <Route path="/users/:handle" element={<UserProfilePage />} />
+              <Route path="/u/:handle" element={<UserProfilePage />} />
               <Route
                 path="/admin"
                 element={
@@ -86,10 +87,10 @@ export function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </main>
-          <footer className="border-t border-slate-900 py-6 text-center text-xs text-slate-500">
-            Duel &middot; Real-time 1v1 Competitive Programming Platform &middot; Duel is an
-            independent competitive programming platform and is not affiliated with, endorsed by, or
-            sponsored by Codeforces.
+          <footer className="border-t border-cyan-500/10 py-6 text-center text-xs text-slate-500 bg-slate-950/60 backdrop-blur-md">
+            <span className="text-cyan-400 font-semibold tracking-wider">DUEL</span> &middot;
+            Real-time 1v1 Competitive Programming Arena &middot; Independent platform not affiliated
+            with, endorsed by, or sponsored by Codeforces.
           </footer>
         </div>
       </BrowserRouter>
