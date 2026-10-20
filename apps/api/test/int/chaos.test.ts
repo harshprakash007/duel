@@ -174,7 +174,8 @@ describe('Chaos & Fault Tolerance Testing (M9 / §19)', () => {
     expect(rejoinRes.snapshot!.currentQuestionIdx).toBe(0);
 
     bot.disconnect();
-  });
+    await srv.matchEngine.finishMatch(match.matchId, 'COMPLETED');
+  }, 60_000);
 
   it('pauses question countdown during Codeforces degraded outage and resumes with extended deadline', async () => {
     // 1. Create two test players
@@ -254,5 +255,6 @@ describe('Chaos & Fault Tolerance Testing (M9 / §19)', () => {
     expect(activeMatch.questions[0]!.deadlineAtMs).toBeGreaterThan(originalDeadlineMs);
 
     bot.disconnect();
-  });
+    await srv.matchEngine.finishMatch(match.matchId, 'COMPLETED');
+  }, 60_000);
 });

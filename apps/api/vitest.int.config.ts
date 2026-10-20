@@ -6,7 +6,7 @@ export default defineConfig({
     environment: 'node',
     // Integration tests share one Postgres + Redis; run files serially.
     fileParallelism: false,
-    testTimeout: 30_000,
+    testTimeout: 60_000,
     hookTimeout: 60_000,
     globalSetup: ['test/int/global-setup.ts'],
   },

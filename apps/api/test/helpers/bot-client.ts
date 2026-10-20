@@ -129,57 +129,62 @@ export class BotClient {
     });
   }
 
-  public async ready(): Promise<{ ok: boolean; error?: string }> {
-    return new Promise((resolve) => {
-      this.socket.emit('match:ready', (res) => resolve(res));
+  private async emitWithAck<T>(event: string, data?: unknown, timeoutMs = 10_000): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Timed out waiting for ack on "${event}" after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      const callback = (res: T) => {
+        clearTimeout(timer);
+        resolve(res);
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const s = this.socket as any;
+      if (data !== undefined) {
+        s.emit(event, data, callback);
+      } else {
+        s.emit(event, callback);
+      }
     });
+  }
+
+  public async ready(): Promise<{ ok: boolean; error?: string }> {
+    return this.emitWithAck('match:ready');
   }
 
   public async submitHint(): Promise<{ ok: boolean; error?: string }> {
-    return new Promise((resolve) => {
-      this.socket.emit('match:submitted', (res) => resolve(res));
-    });
+    return this.emitWithAck('match:submitted');
   }
 
   public async resign(): Promise<{ ok: boolean; error?: string }> {
-    return new Promise((resolve) => {
-      this.socket.emit('match:resign', (res) => resolve(res));
-    });
+    return this.emitWithAck('match:resign');
   }
 
   public async rejoin(): Promise<{ ok: boolean; snapshot?: MatchStateSnapshot; error?: string }> {
-    return new Promise((resolve) => {
-      this.socket.emit('match:rejoin', (res) => resolve(res));
-    });
+    return this.emitWithAck('match:rejoin');
   }
 
   public async joinQueue(sheetSlug: string): Promise<{ ok: boolean; error?: string }> {
-    return new Promise((resolve) => {
-      this.socket.emit('queue:join', { sheetSlug }, (res) => resolve(res));
-    });
+    return this.emitWithAck('queue:join', { sheetSlug });
   }
 
   public async leaveQueue(): Promise<{ ok: boolean }> {
-    return new Promise((resolve) => {
-      this.socket.emit('queue:leave', (res) => resolve(res));
-    });
+    return this.emitWithAck('queue:leave');
   }
 
   public async createRoom(
     sheetSlug: string,
     questionCount?: number,
   ): Promise<{ ok: boolean; roomCode?: string; error?: string }> {
-    return new Promise((resolve) => {
-      this.socket.emit('room:create', { sheetSlug, questionCount }, (res) => resolve(res));
-    });
+    return this.emitWithAck('room:create', { sheetSlug, questionCount });
   }
 
   public async joinRoom(
     roomCode: string,
   ): Promise<{ ok: boolean; matchId?: string; error?: string }> {
-    return new Promise((resolve) => {
-      this.socket.emit('room:join', { roomCode }, (res) => resolve(res));
-    });
+    return this.emitWithAck('room:join', { roomCode });
   }
 
   public disconnect(): void {
